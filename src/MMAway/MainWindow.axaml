@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MMAway.MainWindow"
+        Title="MMAway"
+        Icon="avares://MMAway/Assets/StopIcon.ico"
+        Width="300" Height="330"
+        CanResize="False">
+  <Grid RowDefinitions="*,Auto,Auto" Margin="12">
+    <TextBox Grid.Row="0" Name="OutputBox" AcceptsReturn="True" TextWrapping="Wrap" />
+    <Button Grid.Row="1" Name="ToggleButton" Content="Start" Margin="0,12,0,0"
+            Height="70" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+            VerticalContentAlignment="Center" FontSize="20" Click="OnToggleClick" />
+    <TextBlock Grid.Row="2" Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="11" />
+  </Grid>
+</Window>
