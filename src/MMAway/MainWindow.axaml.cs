@@ -64,7 +64,8 @@ public partial class MainWindow : Window
             engine = new ActivityEngine(
                 input,
                 GetBounds,
-                text => Dispatcher.UIThread.Post(() => OutputBox.Text += text),
+                text => Dispatcher.UIThread.Post(() => AppendOutputText(text)),
+                () => Dispatcher.UIThread.Post(SelectRandomOutputText),
                 () => Dispatcher.UIThread.Post(() => OutputBox.Clear()));
             StatusText.Text = PlatformServices.GetSessionWarning();
         }
@@ -73,6 +74,30 @@ public partial class MainWindow : Window
             ToggleButton.IsEnabled = false;
             StatusText.Text = ex.Message;
         }
+    }
+
+    private void AppendOutputText(string text)
+    {
+        var content = OutputBox.Text ?? string.Empty;
+        var start = Math.Clamp(OutputBox.SelectionStart, 0, content.Length);
+        var end = Math.Clamp(OutputBox.SelectionEnd, 0, content.Length);
+        if (start > end) (start, end) = (end, start);
+
+        var insertAt = end > start ? start : content.Length;
+        var removeLength = end - start;
+        OutputBox.Text = content.Remove(insertAt, removeLength).Insert(insertAt, text);
+        OutputBox.CaretIndex = insertAt + text.Length;
+    }
+
+    private void SelectRandomOutputText()
+    {
+        var length = OutputBox.Text?.Length ?? 0;
+        if (length == 0) return;
+
+        var start = Random.Shared.Next(length);
+        var selectedLength = Random.Shared.Next(1, Math.Min(12, length - start) + 1);
+        OutputBox.SelectionStart = start;
+        OutputBox.SelectionEnd = start + selectedLength;
     }
 
     private async void OnToggleClick(object? sender, RoutedEventArgs e)

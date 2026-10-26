@@ -8,10 +8,13 @@ namespace MMAway;
 /// </summary>
 public sealed class ActivityEngine
 {
+    private static readonly MovementPattern[] MovementPatterns = Enum.GetValues<MovementPattern>();
+
     private readonly IInputInjector input;
     private readonly Random random = new();
     private readonly Func<PixelRect> getWindowBounds;
     private readonly Action<string> appendText;
+    private readonly Action selectRandomText;
     private readonly Action clearText;
     private const int EdgeMargin = 8;
 
@@ -26,13 +29,17 @@ public sealed class ActivityEngine
     private readonly System.Diagnostics.Stopwatch paceClock = new();
     private double paceIntervalMs;
     private long paceCount;
+    private MovementPattern? lastPattern;
+    private int typingCyclesSinceSelection;
+    private int nextSelectionAfter = 3;
 
     public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds,
-        Action<string> appendText, Action clearText)
+        Action<string> appendText, Action selectRandomText, Action clearText)
     {
         this.input = input;
         this.getWindowBounds = getWindowBounds;
         this.appendText = appendText;
+        this.selectRandomText = selectRandomText;
         this.clearText = clearText;
     }
 
@@ -167,13 +174,6 @@ public sealed class ActivityEngine
         else runToken.ThrowIfCancellationRequested();
     }
 
-    // Side length for patterns so they always fit inside the window.
-    private int PatternSize()
-    {
-        var a = Area;
-        return Math.Max(20, Math.Min(a.Width, a.Height) * 3 / 4);
-    }
-
     private static void Pause(int ms, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -188,14 +188,80 @@ public sealed class ActivityEngine
             appendText(((char)random.Next(48, 122)).ToString());
             Pause(repeat * random.Next(20, 100), ct);
         }
+
+        typingCyclesSinceSelection++;
+        if (typingCyclesSinceSelection >= nextSelectionAfter)
+        {
+            selectRandomText();
+            typingCyclesSinceSelection = 0;
+            nextSelectionAfter = random.Next(3, 5);
+        }
     }
 
     private void RunPattern(CancellationToken ct)
     {
-        if (random.Next(1, 9) >= 5) MoveInSquare(ct);
-        else MoveInCircles(ct);
+        var candidates = MovementPatterns.Where(pattern => pattern != lastPattern).ToArray();
+        var pattern = candidates[random.Next(candidates.Length)];
+        lastPattern = pattern;
+        MovePattern(pattern, ct);
 
         ClickOnWindow();
+    }
+
+    private void MovePattern(MovementPattern pattern, CancellationToken ct)
+    {
+        var points = CreatePatternPoints(pattern);
+        BeginPaced(points.Length);
+        try
+        {
+            foreach (var point in points)
+            {
+                ct.ThrowIfCancellationRequested();
+                MoveTo(point);
+                Pace();
+            }
+        }
+        finally
+        {
+            EndPaced();
+        }
+    }
+
+    private PixelPoint[] CreatePatternPoints(MovementPattern pattern)
+    {
+        var area = Area;
+        var center = area.Center;
+        var radius = Math.Max(1, Math.Min(area.Width, area.Height) * 0.38);
+        var halfWidth = Math.Max(1, area.Width * 0.42);
+        var halfHeight = Math.Max(1, area.Height * 0.42);
+
+        IReadOnlyList<Point> points = pattern switch
+        {
+            MovementPattern.Square => MovementPatternLibrary.CreateSquare(),
+            MovementPattern.Circle => MovementPatternLibrary.CreateCircle(),
+            MovementPattern.Triangle => MovementPatternLibrary.CreateTriangle(),
+            MovementPattern.VerticalHourglass => MovementPatternLibrary.CreateVerticalHourglass(),
+            MovementPattern.HorizontalHourglass => MovementPatternLibrary.CreateHorizontalHourglass(),
+            MovementPattern.SpiralOut => MovementPatternLibrary.CreateSpiralOut(),
+            MovementPattern.SpiralIn => MovementPatternLibrary.CreateSpiralIn(),
+            MovementPattern.Oval => MovementPatternLibrary.CreateOval(),
+            MovementPattern.IceCreamCone => MovementPatternLibrary.CreateIceCreamCone(),
+            MovementPattern.FigureEight => MovementPatternLibrary.CreateFigureEight(),
+            _ => throw new ArgumentOutOfRangeException(nameof(pattern), pattern, "Unknown movement pattern.")
+        };
+
+        return points.Select(point =>
+        {
+            var scaleX = pattern is MovementPattern.Circle or MovementPattern.SpiralOut or MovementPattern.SpiralIn
+                ? radius
+                : halfWidth;
+            var scaleY = pattern is MovementPattern.Circle or MovementPattern.SpiralOut or MovementPattern.SpiralIn
+                ? radius
+                : halfHeight;
+            return new PixelPoint(
+                center.X + (int)Math.Round(point.X * scaleX),
+                center.Y + (int)Math.Round(point.Y * scaleY));
+        }).ToArray();
     }
 
     private void ClickOnWindow()
@@ -243,95 +309,4 @@ public sealed class ActivityEngine
         }
     }
 
-    private void MoveInSquare(CancellationToken ct)
-    {
-        var size = PatternSize();
-        var v = random.Next(1, 3);
-        var c = Center;
-        MoveTo(new PixelPoint(c.X - size / 2, c.Y - size / 2));
-        BeginPaced(size * 4);
-        try
-        {
-            SquareCore(size, v);
-        }
-        finally
-        {
-            EndPaced();
-        }
-    }
-
-    private void SquareCore(int size, int v)
-    {
-        for (var i = 0; i < size; i++)
-        {
-            Move(1, -v);
-            i++;
-            Move(1, v);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-v, 1);
-            i++;
-            Move(v, 1);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-1, -v);
-            i++;
-            Move(-1, v);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-v, -1);
-            i++;
-            Move(v, -1);
-        }
-    }
-
-    private void MoveInCircles(CancellationToken ct)
-    {
-        var size = PatternSize();
-        var v = random.Next(1, 3);
-        var c = Center;
-        MoveTo(new PixelPoint(c.X - size / 2, c.Y + size / 2));
-        BeginPaced(size * 4);
-        try
-        {
-            CirclesCore(size, v);
-        }
-        finally
-        {
-            EndPaced();
-        }
-    }
-
-    private void CirclesCore(int size, int v)
-    {
-        for (var i = 0; i < size; i++)
-        {
-            Move(1, -1);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-v, 1);
-            i++;
-            Move(v, 1);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-1, -1);
-        }
-
-        for (var i = 0; i < size; i++)
-        {
-            Move(-v, 1);
-            i++;
-            Move(v, 1);
-        }
-    }
 }
