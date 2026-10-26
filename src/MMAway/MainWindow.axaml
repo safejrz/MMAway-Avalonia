@@ -4,12 +4,36 @@
         Title="MMAway"
         Icon="avares://MMAway/Assets/StopIcon.ico"
         Width="350" Height="500"
-        CanResize="False">
-  <Grid RowDefinitions="*,Auto,Auto,Auto" Margin="12">
+        CanResize="False"
+        SystemDecorations="None">
+  <Grid RowDefinitions="32,*">
+    <Border Grid.Row="0" Name="TitleBar" Background="Transparent"
+            PointerPressed="OnTitleBarPointerPressed">
+      <Grid ColumnDefinitions="*,*,*">
+        <Button Grid.Column="0" Name="OptionsButton" Content="⚙" FontSize="16"
+                Width="40" Height="32" Padding="0"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
+                Click="OnOptionsClick" ToolTip.Tip="Options" />
+        <TextBlock Grid.Column="1" Text="MMAway" HorizontalAlignment="Center"
+                   VerticalAlignment="Center" IsHitTestVisible="False" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button Content="—" Width="40" Height="32" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  Background="Transparent" BorderThickness="0"
+                  Click="OnMinimizeClick" ToolTip.Tip="Minimize" />
+          <Button Content="×" FontSize="22" Width="40" Height="32" Padding="0"
+                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                  Background="Transparent" BorderThickness="0"
+                  Click="OnCloseClick" ToolTip.Tip="Close" />
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto" Margin="10">
     <TextBox Grid.Row="0" Name="OutputBox" AcceptsReturn="True" TextWrapping="Wrap" />
     <Grid Grid.Row="1" Name="RunningIndicator" ColumnDefinitions="Auto,*,Auto"
           HorizontalAlignment="Stretch" VerticalAlignment="Center"
-          Margin="0,12,0,0" ColumnSpacing="8" Opacity="0" IsHitTestVisible="False">
+          Margin="0,6,0,0" ColumnSpacing="8" Opacity="0" IsHitTestVisible="False">
       <TextBlock Grid.Column="0" Name="SpinnerLeft" Text="◌" FontSize="19"
                  VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
       <Grid Grid.Column="1" MinWidth="250">
@@ -21,9 +45,11 @@
       <TextBlock Grid.Column="2" Name="SpinnerRight" Text="◌" FontSize="19"
                  VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
     </Grid>
-    <Button Grid.Row="2" Name="ToggleButton" Content="Start" Margin="0,12,0,0"
+    <Button Grid.Row="2" Name="ToggleButton" Content="Start" Margin="0,6,0,0"
             Height="70" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
             VerticalContentAlignment="Center" FontSize="20" Click="OnToggleClick" />
-    <TextBlock Grid.Row="3" Name="StatusText" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="11" />
+    <TextBlock Grid.Row="3" Name="StatusText" IsVisible="False"
+               Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11" />
+    </Grid>
   </Grid>
 </Window>

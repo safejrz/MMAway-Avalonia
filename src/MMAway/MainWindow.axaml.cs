@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using MMAway.Input;
@@ -14,6 +15,9 @@ public partial class MainWindow : Window
     private IInputInjector? input;
     private IKeepAwake? keepAwake;
     private ActivityEngine? engine;
+    private readonly SettingsStore settingsStore = new();
+    private ActivitySettings settings = new();
+    private string sessionWarning = string.Empty;
     private readonly RotateTransform leftSpinnerRotation = new();
     private readonly RotateTransform rightSpinnerRotation = new();
     private readonly DispatcherTimer spinnerTimer = new() { Interval = TimeSpan.FromMilliseconds(20) };
@@ -61,7 +65,7 @@ public partial class MainWindow : Window
     private static WindowIcon LoadIcon(string name) =>
         new(Avalonia.Platform.AssetLoader.Open(new Uri($"avares://MMAway/Assets/{name}")));
 
-    private void OnOpened(object? sender, EventArgs e)
+    private async void OnOpened(object? sender, EventArgs e)
     {
         var bounds = (Screens.Primary ?? Screens.All.FirstOrDefault())?.Bounds ?? new PixelRect(0, 0, 1024, 768);
         Position = new PixelPoint(bounds.X + bounds.Width / 10, bounds.Y + bounds.Height / 5);
@@ -70,20 +74,23 @@ public partial class MainWindow : Window
 
         try
         {
+            settings = await settingsStore.LoadAsync();
             input = PlatformServices.CreateInput();
             keepAwake = PlatformServices.CreateKeepAwake();
             engine = new ActivityEngine(
                 input,
                 GetBounds,
+                () => Volatile.Read(ref settings),
                 text => Dispatcher.UIThread.Post(() => AppendOutputText(text)),
                 () => Dispatcher.UIThread.Post(SelectRandomOutputText),
                 () => Dispatcher.UIThread.Post(() => OutputBox.Clear()));
-            StatusText.Text = PlatformServices.GetSessionWarning();
+            sessionWarning = PlatformServices.GetSessionWarning() ?? string.Empty;
+            SetStatusText(sessionWarning);
         }
         catch (Exception ex)
         {
             ToggleButton.IsEnabled = false;
-            StatusText.Text = ex.Message;
+            SetStatusText(ex.Message);
         }
     }
 
@@ -124,15 +131,52 @@ public partial class MainWindow : Window
             Icon = stopIcon;
             ToggleButton.Content = "Start";
             ToggleButton.IsEnabled = true;
+            OptionsButton.IsEnabled = true;
             return;
         }
 
+        OptionsButton.IsEnabled = false;
         keepAwake.Enable();
         SetRunningVisuals(true);
         Icon = runIcon;
         ToggleButton.Content = "Stop!";
         engine.Start();
     }
+
+    private async void OnOptionsClick(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new OptionsWindow(Volatile.Read(ref settings));
+        var saved = await dialog.ShowDialog<bool>(this);
+        if (!saved || dialog.SavedSettings is not { } updatedSettings) return;
+
+        try
+        {
+            await settingsStore.SaveAsync(updatedSettings);
+            Volatile.Write(ref settings, updatedSettings);
+        }
+        catch (Exception ex)
+        {
+            SetStatusText($"Could not save settings: {ex.Message}");
+        }
+    }
+
+    private void SetStatusText(string message)
+    {
+        StatusText.Text = message;
+        StatusText.IsVisible = !string.IsNullOrWhiteSpace(message);
+    }
+
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source is Button) return;
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            BeginMoveDrag(e);
+    }
+
+    private void OnMinimizeClick(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
     private void SetRunningVisuals(bool isRunning)
     {

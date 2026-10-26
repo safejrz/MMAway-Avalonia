@@ -13,6 +13,7 @@ public sealed class ActivityEngine
     private readonly IInputInjector input;
     private readonly Random random = new();
     private readonly Func<PixelRect> getWindowBounds;
+    private readonly Func<ActivitySettings> getSettings;
     private readonly Action<string> appendText;
     private readonly Action selectRandomText;
     private readonly Action clearText;
@@ -34,10 +35,12 @@ public sealed class ActivityEngine
     private int nextSelectionAfter = 3;
 
     public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds,
+        Func<ActivitySettings> getSettings,
         Action<string> appendText, Action selectRandomText, Action clearText)
     {
         this.input = input;
         this.getWindowBounds = getWindowBounds;
+        this.getSettings = getSettings;
         this.appendText = appendText;
         this.selectRandomText = selectRandomText;
         this.clearText = clearText;
@@ -61,9 +64,6 @@ public sealed class ActivityEngine
         {
             if (loop is not null) await loop.ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-        }
         finally
         {
             cts.Dispose();
@@ -75,50 +75,45 @@ public sealed class ActivityEngine
     private Task RunAsync(CancellationToken ct)
     {
         runToken = ct;
-        try
-        {
-            MoveTo(Center);
-            RunPattern(ct);
+        if (ct.IsCancellationRequested) return Task.CompletedTask;
+        MoveTo(Center);
+        if (!RunPattern(ct)) return Task.CompletedTask;
 
-            var delay = random.Next(10000, 15000);
-            while (!ct.IsCancellationRequested)
-            {
-                // Waiting on the token avoids the TaskCanceledException Task.Delay throws on stop.
-                if (ct.WaitHandle.WaitOne(delay)) break;
-                Step(ct);
-                delay = random.Next(5000, 15000);
-            }
-        }
-        catch (OperationCanceledException)
+        var delay = random.Next(10000, 15000);
+        while (!ct.IsCancellationRequested)
         {
+            if (ct.WaitHandle.WaitOne(delay)) break;
+            if (!Step(ct)) break;
+            delay = NextActivityInterval();
         }
         return Task.CompletedTask;
     }
 
-    private void Step(CancellationToken ct)
+    private bool Step(CancellationToken ct)
     {
-        RandomMove(ct);
-        WriteRandomText(ct);
+        if (!RandomMove(ct) || !WriteRandomText(ct)) return false;
 
         if (pass == 0)
         {
+            if (ct.IsCancellationRequested) return false;
             MoveTo(Center);
         }
 
         if (pass > 2 && random.Next(0, 3) <= pass)
         {
-            RunPattern(ct);
-            WriteRandomText(ct);
+            if (!RunPattern(ct) || !WriteRandomText(ct)) return false;
         }
 
         if (pass >= 4)
         {
-            RandomMove(ct);
+            if (!RandomMove(ct)) return false;
             pass = 0;
-            clearText();
+            if (getSettings().TypingEnabled)
+                clearText();
         }
 
         pass++;
+        return !ct.IsCancellationRequested;
     }
 
     // Area the cursor is allowed to occupy: the app window minus a small margin.
@@ -143,19 +138,12 @@ public sealed class ActivityEngine
         input.SetCursorPosition(new PixelPoint(x, y));
     }
 
-    private void Move(int dx, int dy)
+    private bool Move(int dx, int dy)
     {
+        if (runToken.IsCancellationRequested) return false;
         var p = input.GetCursorPosition();
         MoveTo(new PixelPoint(p.X + dx, p.Y + dy));
-        Pace();
-    }
-
-    private void BeginPaced(int expectedMoves)
-    {
-        var durationMs = random.Next(MinMoveSeconds * 1000, MaxMoveSeconds * 1000 + 1);
-        paceIntervalMs = (double)durationMs / Math.Max(1, expectedMoves);
-        paceCount = 0;
-        paceClock.Restart();
+        return Pace();
     }
 
     private void EndPaced()
@@ -165,28 +153,28 @@ public sealed class ActivityEngine
     }
 
     // Deadline-based, so coarse OS sleep granularity cannot stretch the total duration.
-    private void Pace()
+    private bool Pace()
     {
-        if (paceIntervalMs <= 0) return;
+        if (runToken.IsCancellationRequested) return false;
+        if (paceIntervalMs <= 0) return true;
         paceCount++;
         var remaining = paceCount * paceIntervalMs - paceClock.Elapsed.TotalMilliseconds;
-        if (remaining >= 1) Pause((int)remaining, runToken);
-        else runToken.ThrowIfCancellationRequested();
+        return remaining < 1 || Pause((int)remaining, runToken);
     }
 
-    private static void Pause(int ms, CancellationToken ct)
-    {
-        ct.ThrowIfCancellationRequested();
-        if (ct.WaitHandle.WaitOne(ms)) ct.ThrowIfCancellationRequested();
-    }
+    private static bool Pause(int ms, CancellationToken ct) =>
+        !ct.IsCancellationRequested && !ct.WaitHandle.WaitOne(ms);
 
-    private void WriteRandomText(CancellationToken ct)
+    private bool WriteRandomText(CancellationToken ct)
     {
+        if (!getSettings().TypingEnabled) return !ct.IsCancellationRequested;
+
         var repeat = random.Next(2, 7);
         for (var i = 0; i < repeat; i++)
         {
+            if (ct.IsCancellationRequested) return false;
             appendText(((char)random.Next(48, 122)).ToString());
-            Pause(repeat * random.Next(20, 100), ct);
+            if (!Pause(repeat * random.Next(20, 100), ct)) return false;
         }
 
         typingCyclesSinceSelection++;
@@ -196,30 +184,33 @@ public sealed class ActivityEngine
             typingCyclesSinceSelection = 0;
             nextSelectionAfter = random.Next(3, 5);
         }
+        return !ct.IsCancellationRequested;
     }
 
-    private void RunPattern(CancellationToken ct)
+    private bool RunPattern(CancellationToken ct)
     {
-        var candidates = MovementPatterns.Where(pattern => pattern != lastPattern).ToArray();
-        var pattern = candidates[random.Next(candidates.Length)];
+        if (ct.IsCancellationRequested) return false;
+        var pattern = ChooseRandomPattern(getSettings());
         lastPattern = pattern;
-        MovePattern(pattern, ct);
+        if (!MovePattern(pattern, ct)) return false;
 
         ClickOnWindow();
+        return !ct.IsCancellationRequested;
     }
 
-    private void MovePattern(MovementPattern pattern, CancellationToken ct)
+    private bool MovePattern(MovementPattern pattern, CancellationToken ct)
     {
         var points = CreatePatternPoints(pattern);
-        BeginPaced(points.Length);
+        BeginPaced(points.Length, getSettings());
         try
         {
             foreach (var point in points)
             {
-                ct.ThrowIfCancellationRequested();
+                if (ct.IsCancellationRequested) return false;
                 MoveTo(point);
-                Pace();
+                if (!Pace()) return false;
             }
+            return true;
         }
         finally
         {
@@ -273,16 +264,16 @@ public sealed class ActivityEngine
         MoveTo(original);
     }
 
-    private void RandomMove(CancellationToken ct)
+    private bool RandomMove(CancellationToken ct)
     {
         var moves = random.Next(20, 55);
         var variance = random.Next(1, 3);
         var horizontal = random.Next(1, 6) >= 4;
 
-        BeginPaced(moves);
+        BeginPaced(moves, getSettings());
         try
         {
-            RandomMoveCore(moves, variance, horizontal);
+            return RandomMoveCore(moves, variance, horizontal);
         }
         finally
         {
@@ -290,23 +281,48 @@ public sealed class ActivityEngine
         }
     }
 
-    private void RandomMoveCore(int moves, int variance, bool horizontal)
+    private MovementPattern ChooseRandomPattern(ActivitySettings settings)
+    {
+        var enabled = settings.SelectedPatterns
+            .Select(name => Enum.Parse<MovementPattern>(name))
+            .ToArray();
+        var candidates = enabled.Where(pattern => pattern != lastPattern).ToArray();
+        if (candidates.Length == 0) candidates = enabled;
+        return candidates[random.Next(candidates.Length)];
+    }
+
+    private int NextActivityInterval()
+    {
+        var settings = getSettings();
+        return random.Next(settings.IntervalMinimumSeconds, settings.IntervalMaximumSeconds + 1) * 1000;
+    }
+
+    private void BeginPaced(int expectedMoves, ActivitySettings settings)
+    {
+        var durationMs = random.Next(MinMoveSeconds * 1000, MaxMoveSeconds * 1000 + 1);
+        paceIntervalMs = (double)durationMs / Math.Max(1, expectedMoves) / settings.Aggressiveness;
+        paceCount = 0;
+        paceClock.Restart();
+    }
+
+    private bool RandomMoveCore(int moves, int variance, bool horizontal)
     {
         for (var i = 0; i < moves; i++)
         {
             if (horizontal)
             {
-                Move(random.Next(-5, 5), -variance);
+                if (!Move(random.Next(-5, 5), -variance)) return false;
                 i++;
-                Move(random.Next(-5, 5), variance);
+                if (!Move(random.Next(-5, 5), variance)) return false;
             }
             else
             {
-                Move(variance, random.Next(-5, 5));
+                if (!Move(variance, random.Next(-5, 5))) return false;
                 i++;
-                Move(variance, random.Next(-5, 5));
+                if (!Move(variance, random.Next(-5, 5))) return false;
             }
         }
+        return !runToken.IsCancellationRequested;
     }
 
 }
