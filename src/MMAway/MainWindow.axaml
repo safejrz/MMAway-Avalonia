@@ -3,7 +3,7 @@
         x:Class="MMAway.MainWindow"
         Title="MMAway"
         Icon="avares://MMAway/Assets/StopIcon.ico"
-        Width="300" Height="330"
+        Width="350" Height="500"
         CanResize="False">
   <Grid RowDefinitions="*,Auto,Auto" Margin="12">
     <TextBox Grid.Row="0" Name="OutputBox" AcceptsReturn="True" TextWrapping="Wrap" />

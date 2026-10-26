@@ -19,11 +19,33 @@ public partial class MainWindow : Window
         InitializeComponent();
         Opened += OnOpened;
         Closing += OnClosing;
-        PositionChanged += (_, e) => windowPosition = e.Point;
+        PositionChanged += (_, _) => UpdateWindowBounds();
+        Resized += (_, _) => UpdateWindowBounds();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == WindowStateProperty) UpdateWindowBounds();
+        };
     }
 
-    // Cached so the engine thread never has to block on the UI thread.
-    private PixelPoint windowPosition;
+    // The engine thread must not touch Avalonia properties, so the effective bounds are
+    // resolved on the UI thread and published as a single immutable reference.
+    private sealed record BoundsSnapshot(PixelRect Rect);
+
+    private BoundsSnapshot currentBounds = new(new PixelRect(0, 0, 1024, 768));
+    private PixelRect screenBounds = new(0, 0, 1024, 768);
+
+    // Falls back to the screen when the window is minimized or not measured yet.
+    private void UpdateWindowBounds()
+    {
+        var origin = this.PointToScreen(new Point(0, 0));
+        var scale = RenderScaling;
+        var rect = new PixelRect(origin.X, origin.Y,
+            (int)(ClientSize.Width * scale), (int)(ClientSize.Height * scale));
+        var useScreen = WindowState == WindowState.Minimized || rect.Width <= 0 || rect.Height <= 0;
+        Volatile.Write(ref currentBounds, new BoundsSnapshot(useScreen ? screenBounds : rect));
+    }
+
+    private PixelRect GetBounds() => Volatile.Read(ref currentBounds).Rect;
 
     private static WindowIcon LoadIcon(string name) =>
         new(Avalonia.Platform.AssetLoader.Open(new Uri($"avares://MMAway/Assets/{name}")));
@@ -32,7 +54,8 @@ public partial class MainWindow : Window
     {
         var bounds = (Screens.Primary ?? Screens.All.FirstOrDefault())?.Bounds ?? new PixelRect(0, 0, 1024, 768);
         Position = new PixelPoint(bounds.X + bounds.Width / 10, bounds.Y + bounds.Height / 5);
-        var home = new PixelPoint(bounds.X + bounds.Width / 4, bounds.Y + bounds.Height / 5 * 4);
+        screenBounds = bounds;
+        UpdateWindowBounds();
 
         try
         {
@@ -40,8 +63,7 @@ public partial class MainWindow : Window
             keepAwake = PlatformServices.CreateKeepAwake();
             engine = new ActivityEngine(
                 input,
-                home,
-                () => windowPosition,
+                GetBounds,
                 text => Dispatcher.UIThread.Post(() => OutputBox.Text += text),
                 () => Dispatcher.UIThread.Post(() => OutputBox.Clear()));
             StatusText.Text = PlatformServices.GetSessionWarning();

@@ -10,21 +10,28 @@ public sealed class ActivityEngine
 {
     private readonly IInputInjector input;
     private readonly Random random = new();
-    private readonly Func<PixelPoint> getWindowPosition;
+    private readonly Func<PixelRect> getWindowBounds;
     private readonly Action<string> appendText;
     private readonly Action clearText;
-    private readonly PixelPoint home;
+    private const int EdgeMargin = 8;
 
     private CancellationTokenSource? cts;
     private Task? loop;
     private int pass;
 
-    public ActivityEngine(IInputInjector input, PixelPoint home, Func<PixelPoint> getWindowPosition,
+    // Each movement routine is stretched to a random 2-5 seconds.
+    private const int MinMoveSeconds = 2;
+    private const int MaxMoveSeconds = 5;
+    private CancellationToken runToken;
+    private readonly System.Diagnostics.Stopwatch paceClock = new();
+    private double paceIntervalMs;
+    private long paceCount;
+
+    public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds,
         Action<string> appendText, Action clearText)
     {
         this.input = input;
-        this.home = home;
-        this.getWindowPosition = getWindowPosition;
+        this.getWindowBounds = getWindowBounds;
         this.appendText = appendText;
         this.clearText = clearText;
     }
@@ -58,17 +65,19 @@ public sealed class ActivityEngine
         }
     }
 
-    private async Task RunAsync(CancellationToken ct)
+    private Task RunAsync(CancellationToken ct)
     {
+        runToken = ct;
         try
         {
-            input.SetCursorPosition(home);
+            MoveTo(Center);
             RunPattern(ct);
 
             var delay = random.Next(10000, 15000);
             while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                // Waiting on the token avoids the TaskCanceledException Task.Delay throws on stop.
+                if (ct.WaitHandle.WaitOne(delay)) break;
                 Step(ct);
                 delay = random.Next(5000, 15000);
             }
@@ -76,6 +85,7 @@ public sealed class ActivityEngine
         catch (OperationCanceledException)
         {
         }
+        return Task.CompletedTask;
     }
 
     private void Step(CancellationToken ct)
@@ -85,7 +95,7 @@ public sealed class ActivityEngine
 
         if (pass == 0)
         {
-            input.SetCursorPosition(home);
+            MoveTo(Center);
         }
 
         if (pass > 2 && random.Next(0, 3) <= pass)
@@ -104,10 +114,64 @@ public sealed class ActivityEngine
         pass++;
     }
 
+    // Area the cursor is allowed to occupy: the app window minus a small margin.
+    private PixelRect Area
+    {
+        get
+        {
+            var b = getWindowBounds();
+            var w = Math.Max(1, b.Width - 2 * EdgeMargin);
+            var h = Math.Max(1, b.Height - 2 * EdgeMargin);
+            return new PixelRect(b.X + EdgeMargin, b.Y + EdgeMargin, w, h);
+        }
+    }
+
+    private PixelPoint Center => Area.Center;
+
+    private void MoveTo(PixelPoint target)
+    {
+        var a = Area;
+        var x = Math.Clamp(target.X, a.X, a.Right - 1);
+        var y = Math.Clamp(target.Y, a.Y, a.Bottom - 1);
+        input.SetCursorPosition(new PixelPoint(x, y));
+    }
+
     private void Move(int dx, int dy)
     {
         var p = input.GetCursorPosition();
-        input.SetCursorPosition(new PixelPoint(p.X + dx, p.Y + dy));
+        MoveTo(new PixelPoint(p.X + dx, p.Y + dy));
+        Pace();
+    }
+
+    private void BeginPaced(int expectedMoves)
+    {
+        var durationMs = random.Next(MinMoveSeconds * 1000, MaxMoveSeconds * 1000 + 1);
+        paceIntervalMs = (double)durationMs / Math.Max(1, expectedMoves);
+        paceCount = 0;
+        paceClock.Restart();
+    }
+
+    private void EndPaced()
+    {
+        paceClock.Reset();
+        paceIntervalMs = 0;
+    }
+
+    // Deadline-based, so coarse OS sleep granularity cannot stretch the total duration.
+    private void Pace()
+    {
+        if (paceIntervalMs <= 0) return;
+        paceCount++;
+        var remaining = paceCount * paceIntervalMs - paceClock.Elapsed.TotalMilliseconds;
+        if (remaining >= 1) Pause((int)remaining, runToken);
+        else runToken.ThrowIfCancellationRequested();
+    }
+
+    // Side length for patterns so they always fit inside the window.
+    private int PatternSize()
+    {
+        var a = Area;
+        return Math.Max(20, Math.Min(a.Width, a.Height) * 3 / 4);
     }
 
     private static void Pause(int ms, CancellationToken ct)
@@ -137,10 +201,10 @@ public sealed class ActivityEngine
     private void ClickOnWindow()
     {
         var original = input.GetCursorPosition();
-        var window = getWindowPosition();
-        input.SetCursorPosition(new PixelPoint(window.X + 10, window.Y + 10));
+        var area = Area;
+        MoveTo(new PixelPoint(area.X + 2, area.Y + 2));
         input.LeftClick();
-        input.SetCursorPosition(original);
+        MoveTo(original);
     }
 
     private void RandomMove(CancellationToken ct)
@@ -149,6 +213,19 @@ public sealed class ActivityEngine
         var variance = random.Next(1, 3);
         var horizontal = random.Next(1, 6) >= 4;
 
+        BeginPaced(moves);
+        try
+        {
+            RandomMoveCore(moves, variance, horizontal);
+        }
+        finally
+        {
+            EndPaced();
+        }
+    }
+
+    private void RandomMoveCore(int moves, int variance, bool horizontal)
+    {
         for (var i = 0; i < moves; i++)
         {
             if (horizontal)
@@ -163,29 +240,39 @@ public sealed class ActivityEngine
                 i++;
                 Move(variance, random.Next(-5, 5));
             }
-
-            if (i % 3 == 0) Pause(3, ct);
         }
     }
 
     private void MoveInSquare(CancellationToken ct)
     {
-        const int size = 350;
+        var size = PatternSize();
         var v = random.Next(1, 3);
+        var c = Center;
+        MoveTo(new PixelPoint(c.X - size / 2, c.Y - size / 2));
+        BeginPaced(size * 4);
+        try
+        {
+            SquareCore(size, v);
+        }
+        finally
+        {
+            EndPaced();
+        }
+    }
 
+    private void SquareCore(int size, int v)
+    {
         for (var i = 0; i < size; i++)
         {
             Move(1, -v);
             i++;
             Move(1, v);
-            if (i % 7 == 0) Pause(1, ct);
         }
 
         for (var i = 0; i < size; i++)
         {
             Move(-v, 1);
             i++;
-            if (i % 9 == 0) Pause(1, ct);
             Move(v, 1);
         }
 
@@ -194,27 +281,38 @@ public sealed class ActivityEngine
             Move(-1, -v);
             i++;
             Move(-1, v);
-            if (i % 8 == 0) Pause(1, ct);
         }
 
         for (var i = 0; i < size; i++)
         {
             Move(-v, -1);
             i++;
-            if (i % 7 == 0) Pause(1, ct);
             Move(v, -1);
         }
     }
 
     private void MoveInCircles(CancellationToken ct)
     {
-        const int size = 300;
+        var size = PatternSize();
         var v = random.Next(1, 3);
+        var c = Center;
+        MoveTo(new PixelPoint(c.X - size / 2, c.Y + size / 2));
+        BeginPaced(size * 4);
+        try
+        {
+            CirclesCore(size, v);
+        }
+        finally
+        {
+            EndPaced();
+        }
+    }
 
+    private void CirclesCore(int size, int v)
+    {
         for (var i = 0; i < size; i++)
         {
             Move(1, -1);
-            if (i % 7 == 0) Pause(1, ct);
         }
 
         for (var i = 0; i < size; i++)
@@ -222,20 +320,17 @@ public sealed class ActivityEngine
             Move(-v, 1);
             i++;
             Move(v, 1);
-            if (i % 11 == 0) Pause(1, ct);
         }
 
         for (var i = 0; i < size; i++)
         {
             Move(-1, -1);
-            if (i % 7 == 0) Pause(1, ct);
         }
 
         for (var i = 0; i < size; i++)
         {
             Move(-v, 1);
             i++;
-            if (i % 9 == 0) Pause(1, ct);
             Move(v, 1);
         }
     }
