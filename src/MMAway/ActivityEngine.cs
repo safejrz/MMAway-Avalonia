@@ -28,8 +28,12 @@ public sealed class ActivityEngine
     private const int MaxMoveSeconds = 5;
     private CancellationToken runToken;
     private readonly System.Diagnostics.Stopwatch paceClock = new();
+    private readonly System.Diagnostics.Stopwatch sessionClock = new();
     private double paceIntervalMs;
     private long paceCount;
+    private PixelPoint? lastInjectedPosition;
+    private int completedActivities;
+    private static readonly TimeSpan CursorPollInterval = TimeSpan.FromMilliseconds(100);
     private MovementPattern? lastPattern;
     private int typingCyclesSinceSelection;
     private int nextSelectionAfter = 3;
@@ -47,10 +51,14 @@ public sealed class ActivityEngine
     }
 
     public bool IsRunning => loop is { IsCompleted: false };
+    public TimeSpan SessionDuration => sessionClock.Elapsed;
+    public int ActivityCount => Volatile.Read(ref completedActivities);
 
     public void Start()
     {
         if (IsRunning) return;
+        Volatile.Write(ref completedActivities, 0);
+        sessionClock.Restart();
         cts = new CancellationTokenSource();
         var ct = cts.Token;
         loop = Task.Run(() => RunAsync(ct));
@@ -75,22 +83,32 @@ public sealed class ActivityEngine
     private Task RunAsync(CancellationToken ct)
     {
         runToken = ct;
-        if (ct.IsCancellationRequested) return Task.CompletedTask;
-        MoveTo(Center);
-        if (!RunPattern(ct)) return Task.CompletedTask;
-
-        var delay = random.Next(10000, 15000);
-        while (!ct.IsCancellationRequested)
+        try
         {
-            if (ct.WaitHandle.WaitOne(delay)) break;
-            if (!Step(ct)) break;
-            delay = NextActivityInterval();
+            if (ct.IsCancellationRequested) return Task.CompletedTask;
+            MoveTo(Center);
+            if (!RunPattern(ct)) return Task.CompletedTask;
+            Interlocked.Increment(ref completedActivities);
+
+            var delay = random.Next(10000, 15000);
+            while (!ct.IsCancellationRequested)
+            {
+                if (ct.WaitHandle.WaitOne(delay)) break;
+                if (!Step(ct)) break;
+                Interlocked.Increment(ref completedActivities);
+                delay = NextActivityInterval();
+            }
+            return Task.CompletedTask;
         }
-        return Task.CompletedTask;
+        finally
+        {
+            sessionClock.Stop();
+        }
     }
 
     private bool Step(CancellationToken ct)
     {
+        if (!WaitForUserMovement(0, ct)) return false;
         if (!RandomMove(ct) || !WriteRandomText(ct)) return false;
 
         if (pass == 0)
@@ -135,15 +153,8 @@ public sealed class ActivityEngine
         var a = Area;
         var x = Math.Clamp(target.X, a.X, a.Right - 1);
         var y = Math.Clamp(target.Y, a.Y, a.Bottom - 1);
-        input.SetCursorPosition(new PixelPoint(x, y));
-    }
-
-    private bool Move(int dx, int dy)
-    {
-        if (runToken.IsCancellationRequested) return false;
-        var p = input.GetCursorPosition();
-        MoveTo(new PixelPoint(p.X + dx, p.Y + dy));
-        return Pace();
+        lastInjectedPosition = new PixelPoint(x, y);
+        input.SetCursorPosition(lastInjectedPosition.Value);
     }
 
     private void EndPaced()
@@ -158,12 +169,58 @@ public sealed class ActivityEngine
         if (runToken.IsCancellationRequested) return false;
         if (paceIntervalMs <= 0) return true;
         paceCount++;
-        var remaining = paceCount * paceIntervalMs - paceClock.Elapsed.TotalMilliseconds;
-        return remaining < 1 || Pause((int)remaining, runToken);
+        while (true)
+        {
+            var remaining = paceCount * paceIntervalMs - paceClock.Elapsed.TotalMilliseconds;
+            if (remaining < 1) return true;
+
+            var waitMilliseconds = (int)Math.Clamp(remaining, 1, CursorPollInterval.TotalMilliseconds);
+            if (!Pause(waitMilliseconds, runToken)) return false;
+            if (lastInjectedPosition is not { } expected || input.GetCursorPosition() == expected) continue;
+            if (!WaitForUserIdle(runToken)) return false;
+            paceClock.Restart();
+            paceCount = 0;
+        }
     }
 
     private static bool Pause(int ms, CancellationToken ct) =>
         !ct.IsCancellationRequested && !ct.WaitHandle.WaitOne(ms);
+
+    private bool WaitForUserIdle(CancellationToken ct)
+    {
+        var idleThreshold = TimeSpan.FromSeconds(getSettings().UserIdleSeconds);
+        var previousPosition = input.GetCursorPosition();
+        var idleClock = System.Diagnostics.Stopwatch.StartNew();
+        while (idleClock.Elapsed < idleThreshold)
+        {
+            if (!Pause((int)CursorPollInterval.TotalMilliseconds, ct)) return false;
+            var currentPosition = input.GetCursorPosition();
+            if (currentPosition == previousPosition) continue;
+
+            previousPosition = currentPosition;
+            idleClock.Restart();
+        }
+
+        lastInjectedPosition = previousPosition;
+        return true;
+    }
+
+    private bool WaitForUserMovement(int milliseconds, CancellationToken ct)
+    {
+        var waitClock = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            if (ct.IsCancellationRequested) return false;
+            if (lastInjectedPosition is { } expected && input.GetCursorPosition() != expected)
+            {
+                if (!WaitForUserIdle(ct)) return false;
+            }
+
+            var remaining = milliseconds - waitClock.ElapsedMilliseconds;
+            if (remaining <= 0) return true;
+            if (!Pause((int)Math.Min(remaining, CursorPollInterval.TotalMilliseconds), ct)) return false;
+        }
+    }
 
     private bool WriteRandomText(CancellationToken ct)
     {
@@ -174,7 +231,7 @@ public sealed class ActivityEngine
         {
             if (ct.IsCancellationRequested) return false;
             appendText(((char)random.Next(48, 122)).ToString());
-            if (!Pause(repeat * random.Next(20, 100), ct)) return false;
+            if (!WaitForUserMovement(repeat * random.Next(20, 100), ct)) return false;
         }
 
         typingCyclesSinceSelection++;
@@ -266,14 +323,27 @@ public sealed class ActivityEngine
 
     private bool RandomMove(CancellationToken ct)
     {
-        var moves = random.Next(20, 55);
-        var variance = random.Next(1, 3);
-        var horizontal = random.Next(1, 6) >= 4;
+        var area = Area;
+        var start = input.GetCursorPosition();
+        var end = new PixelPoint(
+            random.Next(area.X, area.Right),
+            random.Next(area.Y, area.Bottom));
+        var control1 = RandomPoint(area);
+        var control2 = RandomPoint(area);
+        var moves = random.Next(36, 61);
 
         BeginPaced(moves, getSettings());
         try
         {
-            return RandomMoveCore(moves, variance, horizontal);
+            for (var i = 1; i <= moves; i++)
+            {
+                if (ct.IsCancellationRequested) return false;
+                var progress = (double)i / moves;
+                var easedProgress = progress * progress * (3 - 2 * progress);
+                MoveTo(CubicBezier(start, control1, control2, end, easedProgress));
+                if (!Pace()) return false;
+            }
+            return true;
         }
         finally
         {
@@ -305,24 +375,22 @@ public sealed class ActivityEngine
         paceClock.Restart();
     }
 
-    private bool RandomMoveCore(int moves, int variance, bool horizontal)
+    private PixelPoint RandomPoint(PixelRect area) =>
+        new(random.Next(area.X, area.Right), random.Next(area.Y, area.Bottom));
+
+    private static PixelPoint CubicBezier(PixelPoint start, PixelPoint control1,
+        PixelPoint control2, PixelPoint end, double t)
     {
-        for (var i = 0; i < moves; i++)
-        {
-            if (horizontal)
-            {
-                if (!Move(random.Next(-5, 5), -variance)) return false;
-                i++;
-                if (!Move(random.Next(-5, 5), variance)) return false;
-            }
-            else
-            {
-                if (!Move(variance, random.Next(-5, 5))) return false;
-                i++;
-                if (!Move(variance, random.Next(-5, 5))) return false;
-            }
-        }
-        return !runToken.IsCancellationRequested;
+        var inverse = 1 - t;
+        var x = inverse * inverse * inverse * start.X
+            + 3 * inverse * inverse * t * control1.X
+            + 3 * inverse * t * t * control2.X
+            + t * t * t * end.X;
+        var y = inverse * inverse * inverse * start.Y
+            + 3 * inverse * inverse * t * control1.Y
+            + 3 * inverse * t * t * control2.Y
+            + t * t * t * end.Y;
+        return new PixelPoint((int)Math.Round(x), (int)Math.Round(y));
     }
 
 }

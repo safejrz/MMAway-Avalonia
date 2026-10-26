@@ -5,67 +5,91 @@
         Width="428" Height="739"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
-  <Grid RowDefinitions="*,Auto" Margin="26">
-      <StackPanel Grid.Row="0" Spacing="14">
-        <StackPanel Spacing="4">
-          <TextBlock Text="Global hotkey" FontSize="16" FontWeight="SemiBold" />
-          <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+M" Width="114" HorizontalAlignment="Left" />
-          <TextBlock Width="326" Text="Saved for the tray/hotkey feature; global registration is not active yet."
-                     HorizontalAlignment="Left" TextWrapping="Wrap" FontSize="11" />
-        </StackPanel>
-
-        <StackPanel Spacing="4">
-          <TextBlock Text="Auto-stop (minutes; 0 disables)" FontSize="16" FontWeight="SemiBold" />
-          <TextBox Name="AutoStopBox" Watermark="0" Width="204" HorizontalAlignment="Left" />
-          <TextBlock Width="326" Text="Saved now; automatic stopping will be activated in the tray/auto-stop feature."
-                     HorizontalAlignment="Left" TextWrapping="Wrap" FontSize="11" />
-        </StackPanel>
-
-        <StackPanel Spacing="4">
-          <TextBlock Text="Movement pattern" FontSize="16" FontWeight="SemiBold" />
-          <Button Name="PatternButton" HorizontalContentAlignment="Left" Click="OnPatternButtonClick"
-                  Content="Random (all patterns)" />
-          <Popup Name="PatternPopup" PlacementTarget="{Binding #PatternButton}"
-                 Placement="Bottom" IsLightDismissEnabled="True">
-            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                    BorderThickness="1" Padding="10" MinWidth="250" MaxHeight="260">
-              <ScrollViewer>
-                <StackPanel Name="PatternChoices" Spacing="4" />
-              </ScrollViewer>
-            </Border>
-          </Popup>
-        </StackPanel>
-
-        <StackPanel Spacing="4">
-          <TextBlock Text="Movement speed" FontSize="16" FontWeight="SemiBold" />
-          <Slider Name="AggressivenessSlider" Width="326" HorizontalAlignment="Left"
-                  Minimum="0.5" Maximum="2" TickFrequency="0.1" IsSnapToTickEnabled="True" />
-          <TextBlock Name="AggressivenessValue" Width="326" HorizontalAlignment="Left"
-                     TextAlignment="Right" />
-          <TextBlock Width="326" Text="Scales each movement's 2–5 second duration: 0.5x is slower, 1.0x is current, 2.0x is faster."
-                     HorizontalAlignment="Left" TextWrapping="Wrap" FontSize="11" />
-        </StackPanel>
-
-        <CheckBox Name="TypingEnabledBox" Content="Enable typing in the activity display" />
-        <TextBlock Width="300" Text="This only adds generated random characters to MMAway's own text box; it does not type into other apps."
-                   HorizontalAlignment="Left" TextWrapping="Wrap" FontSize="11" />
-
-        <TextBlock Text="Activity interval (seconds)" FontSize="16" FontWeight="SemiBold" />
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-          <StackPanel Grid.Column="0" Spacing="4">
-            <TextBlock Text="Minimum" />
-            <TextBox Name="MinimumIntervalBox" Watermark="5" Width="85" HorizontalAlignment="Left" />
+  <Grid RowDefinitions="*,Auto,Auto" Margin="26">
+    <TabControl Grid.Row="0">
+      <TabItem Header="General">
+        <StackPanel Spacing="18" Margin="12">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Global hotkey" FontSize="16" FontWeight="SemiBold" />
+            <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+M" Width="114" HorizontalAlignment="Left" />
+            <TextBlock Text="Saved for the tray/hotkey feature; global registration is not active yet."
+                       TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Spacing="4">
-            <TextBlock Text="Maximum" />
-            <TextBox Name="MaximumIntervalBox" Watermark="15" Width="85" HorizontalAlignment="Left" />
-          </StackPanel>
-        </Grid>
 
-        <TextBlock Name="ErrorText" Width="326" Foreground="Red" TextWrapping="Wrap" IsVisible="False" />
-      </StackPanel>
-    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+          <StackPanel Spacing="4">
+            <TextBlock Text="Auto-stop (minutes; 0 disables)" FontSize="16" FontWeight="SemiBold" />
+            <TextBox Name="AutoStopBox" Watermark="0" Width="204" HorizontalAlignment="Left" />
+            <TextBlock Text="Saved now; automatic stopping will be activated in the tray/auto-stop feature."
+                       TextWrapping="Wrap" FontSize="11" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Activity interval (seconds)" FontSize="16" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+              <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="Minimum" />
+                <TextBox Name="MinimumIntervalBox" Watermark="5" Width="85" HorizontalAlignment="Left" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="Maximum" />
+                <TextBox Name="MaximumIntervalBox" Watermark="15" Width="85" HorizontalAlignment="Left" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+
+          <CheckBox Name="ShowSessionInfoBox" Content="Show session time and activity count" />
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Mouse">
+        <StackPanel Spacing="18" Margin="12">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Resume after cursor is idle (seconds)" FontSize="16" FontWeight="SemiBold" />
+            <TextBox Name="UserIdleSecondsBox" Watermark="45" Width="85" HorizontalAlignment="Left" />
+            <TextBlock Text="Automated activity resumes after the cursor remains still for this long."
+                       TextWrapping="Wrap" FontSize="11" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Movement pattern" FontSize="16" FontWeight="SemiBold" />
+            <Button Name="PatternButton" HorizontalContentAlignment="Left" Click="OnPatternButtonClick"
+                    Content="Random (all patterns)" />
+            <Popup Name="PatternPopup" PlacementTarget="{Binding #PatternButton}"
+                   Placement="Bottom" IsLightDismissEnabled="True">
+              <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                      BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                      BorderThickness="1" Padding="10" MinWidth="250" MaxHeight="260">
+                <ScrollViewer>
+                  <StackPanel Name="PatternChoices" Spacing="4" />
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Movement speed" FontSize="16" FontWeight="SemiBold" />
+            <Slider Name="AggressivenessSlider" HorizontalAlignment="Stretch"
+                    Minimum="0.5" Maximum="3" TickFrequency="0.1" IsSnapToTickEnabled="True" />
+            <TextBlock Name="AggressivenessValue" HorizontalAlignment="Stretch" TextAlignment="Right" />
+            <TextBlock Text="Scales each movement's 2–5 second duration: 0.5x is slower, 1.0x is current, 3.0x is faster."
+                       TextWrapping="Wrap" FontSize="11" />
+          </StackPanel>
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Keyboard">
+        <StackPanel Spacing="8" Margin="12">
+          <CheckBox Name="TypingEnabledBox" Content="Enable typing in the activity display" />
+          <TextBlock Text="This only adds generated random characters to MMAway's own text box; it does not type into other apps."
+                     TextWrapping="Wrap" FontSize="11" />
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+
+    <TextBlock Grid.Row="1" Name="ErrorText" Foreground="Red" TextWrapping="Wrap"
+               IsVisible="False" Margin="12,4,12,0" />
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                 Spacing="10" Margin="0,12,0,0">
       <Button Content="Reset to defaults" Click="OnResetClick" />
       <Button Content="Cancel" Click="OnCancelClick" />

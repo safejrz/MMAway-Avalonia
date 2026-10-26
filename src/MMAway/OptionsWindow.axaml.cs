@@ -37,6 +37,8 @@ public partial class OptionsWindow : Window
         AggressivenessValue.Text = $"{settings.Aggressiveness:0.0}x";
         AutoStopBox.Text = settings.AutoStopMinutes.ToString();
         HotkeyBox.Text = settings.GlobalHotkey;
+        UserIdleSecondsBox.Text = settings.UserIdleSeconds.ToString();
+        ShowSessionInfoBox.IsChecked = settings.ShowSessionInfo;
 
         updatingPatternChecks = true;
         foreach (var (name, checkBox) in patternCheckBoxes)
@@ -122,9 +124,10 @@ public partial class OptionsWindow : Window
         ErrorText.IsVisible = false;
         if (!int.TryParse(MinimumIntervalBox.Text, out var minimum) ||
             !int.TryParse(MaximumIntervalBox.Text, out var maximum) ||
-            !int.TryParse(AutoStopBox.Text, out var autoStop))
+            !int.TryParse(AutoStopBox.Text, out var autoStop) ||
+            !int.TryParse(UserIdleSecondsBox.Text, out var userIdleSeconds))
         {
-            ShowError("Enter whole numbers for the interval and auto-stop fields.");
+            ShowError("Enter whole numbers for the interval, auto-stop, and resume-delay fields.");
             return;
         }
 
@@ -138,6 +141,8 @@ public partial class OptionsWindow : Window
                 .ToList(),
             TypingEnabled = TypingEnabledBox.IsChecked ?? false,
             Aggressiveness = AggressivenessSlider.Value,
+            UserIdleSeconds = userIdleSeconds,
+            ShowSessionInfo = ShowSessionInfoBox.IsChecked ?? false,
             AutoStopMinutes = autoStop,
             GlobalHotkey = HotkeyBox.Text?.Trim() ?? string.Empty
         };

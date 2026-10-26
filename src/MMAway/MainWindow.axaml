@@ -39,7 +39,7 @@
       <Grid Grid.Column="1" MinWidth="250">
         <ProgressBar Name="ActivityProgress" Height="10" IsIndeterminate="True"
                      VerticalAlignment="Center" />
-        <TextBlock Text="Running" HorizontalAlignment="Center" VerticalAlignment="Center"
+        <TextBlock Name="RunningLabel" Text="Running" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="12" FontWeight="SemiBold" />
       </Grid>
       <TextBlock Grid.Column="2" Name="SpinnerRight" Text="◌" FontSize="19"

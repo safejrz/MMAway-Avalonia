@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly RotateTransform leftSpinnerRotation = new();
     private readonly RotateTransform rightSpinnerRotation = new();
     private readonly DispatcherTimer spinnerTimer = new() { Interval = TimeSpan.FromMilliseconds(20) };
+    private readonly DispatcherTimer sessionStatsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow()
     {
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
             leftSpinnerRotation.Angle = (leftSpinnerRotation.Angle + 6) % 360;
             rightSpinnerRotation.Angle = (rightSpinnerRotation.Angle + 6) % 360;
         };
+        sessionStatsTimer.Tick += (_, _) => UpdateRunningStats();
         Opened += OnOpened;
         Closing += OnClosing;
         PositionChanged += (_, _) => UpdateWindowBounds();
@@ -132,6 +134,7 @@ public partial class MainWindow : Window
             ToggleButton.Content = "Start";
             ToggleButton.IsEnabled = true;
             OptionsButton.IsEnabled = true;
+            SetStatusText(settings.ShowSessionInfo ? FormatSessionStats() : sessionWarning);
             return;
         }
 
@@ -153,6 +156,8 @@ public partial class MainWindow : Window
         {
             await settingsStore.SaveAsync(updatedSettings);
             Volatile.Write(ref settings, updatedSettings);
+            if (engine?.IsRunning != true)
+                SetStatusText(settings.ShowSessionInfo ? FormatSessionStats() : sessionWarning);
         }
         catch (Exception ex)
         {
@@ -184,15 +189,33 @@ public partial class MainWindow : Window
         RunningIndicator.IsHitTestVisible = isRunning;
         if (isRunning)
         {
+            RunningLabel.Text = settings.ShowSessionInfo
+                ? "Running · 00:00:00 · 0 cycles"
+                : "Running";
             spinnerTimer.Start();
+            sessionStatsTimer.Start();
+            SetStatusText(string.Empty);
         }
         else
         {
             spinnerTimer.Stop();
+            sessionStatsTimer.Stop();
             leftSpinnerRotation.Angle = 0;
             rightSpinnerRotation.Angle = 0;
+            RunningLabel.Text = "Running";
         }
     }
+
+    private void UpdateRunningStats()
+    {
+        if (engine is null) return;
+        RunningLabel.Text = settings.ShowSessionInfo
+            ? $"Running · {engine.SessionDuration:hh\\:mm\\:ss} · {engine.ActivityCount} cycles"
+            : "Running";
+    }
+
+    private string FormatSessionStats() =>
+        $"Last session: {engine?.SessionDuration:hh\\:mm\\:ss} · {engine?.ActivityCount ?? 0} cycles";
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
