@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using MMAway.Input;
 
@@ -13,10 +14,20 @@ public partial class MainWindow : Window
     private IInputInjector? input;
     private IKeepAwake? keepAwake;
     private ActivityEngine? engine;
+    private readonly RotateTransform leftSpinnerRotation = new();
+    private readonly RotateTransform rightSpinnerRotation = new();
+    private readonly DispatcherTimer spinnerTimer = new() { Interval = TimeSpan.FromMilliseconds(20) };
 
     public MainWindow()
     {
         InitializeComponent();
+        SpinnerLeft.RenderTransform = leftSpinnerRotation;
+        SpinnerRight.RenderTransform = rightSpinnerRotation;
+        spinnerTimer.Tick += (_, _) =>
+        {
+            leftSpinnerRotation.Angle = (leftSpinnerRotation.Angle + 6) % 360;
+            rightSpinnerRotation.Angle = (rightSpinnerRotation.Angle + 6) % 360;
+        };
         Opened += OnOpened;
         Closing += OnClosing;
         PositionChanged += (_, _) => UpdateWindowBounds();
@@ -109,6 +120,7 @@ public partial class MainWindow : Window
             ToggleButton.IsEnabled = false;
             await engine.StopAsync();
             keepAwake.Disable();
+            SetRunningVisuals(false);
             Icon = stopIcon;
             ToggleButton.Content = "Start";
             ToggleButton.IsEnabled = true;
@@ -116,13 +128,31 @@ public partial class MainWindow : Window
         }
 
         keepAwake.Enable();
+        SetRunningVisuals(true);
         Icon = runIcon;
         ToggleButton.Content = "Stop!";
         engine.Start();
     }
 
+    private void SetRunningVisuals(bool isRunning)
+    {
+        RunningIndicator.Opacity = isRunning ? 1 : 0;
+        RunningIndicator.IsHitTestVisible = isRunning;
+        if (isRunning)
+        {
+            spinnerTimer.Start();
+        }
+        else
+        {
+            spinnerTimer.Stop();
+            leftSpinnerRotation.Angle = 0;
+            rightSpinnerRotation.Angle = 0;
+        }
+    }
+
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        SetRunningVisuals(false);
         engine?.StopAsync().GetAwaiter().GetResult();
         keepAwake?.Dispose();
         input?.Dispose();
