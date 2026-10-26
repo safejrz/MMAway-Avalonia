@@ -21,6 +21,11 @@ public partial class OptionsWindow : Window
         InitializeComponent();
         BuildPatternChoices();
         SetValues(settings);
+        TypingSpacesBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ToggleButton.IsCheckedProperty)
+                SpaceFrequencyPanel.IsEnabled = TypingSpacesBox.IsChecked == true;
+        };
         AggressivenessSlider.PropertyChanged += (_, e) =>
         {
             if (e.Property == Slider.ValueProperty)
@@ -39,6 +44,14 @@ public partial class OptionsWindow : Window
         HotkeyBox.Text = settings.GlobalHotkey;
         UserIdleSecondsBox.Text = settings.UserIdleSeconds.ToString();
         ShowSessionInfoBox.IsChecked = settings.ShowSessionInfo;
+        TypingIntervalMinimumBox.Text = settings.TypingIntervalMinimumSeconds.ToString();
+        TypingIntervalMaximumBox.Text = settings.TypingIntervalMaximumSeconds.ToString();
+        TypingBurstMinimumBox.Text = settings.TypingBurstMinimumCharacters.ToString();
+        TypingBurstMaximumBox.Text = settings.TypingBurstMaximumCharacters.ToString();
+        TypingSpacesBox.IsChecked = settings.TypingSpacesEnabled;
+        SpaceMinimumBox.Text = settings.SpaceMinimumCharacters.ToString();
+        SpaceMaximumBox.Text = settings.SpaceMaximumCharacters.ToString();
+        SpaceFrequencyPanel.IsEnabled = settings.TypingSpacesEnabled;
 
         updatingPatternChecks = true;
         foreach (var (name, checkBox) in patternCheckBoxes)
@@ -125,9 +138,15 @@ public partial class OptionsWindow : Window
         if (!int.TryParse(MinimumIntervalBox.Text, out var minimum) ||
             !int.TryParse(MaximumIntervalBox.Text, out var maximum) ||
             !int.TryParse(AutoStopBox.Text, out var autoStop) ||
-            !int.TryParse(UserIdleSecondsBox.Text, out var userIdleSeconds))
+            !int.TryParse(UserIdleSecondsBox.Text, out var userIdleSeconds) ||
+            !int.TryParse(TypingIntervalMinimumBox.Text, out var typingIntervalMinimum) ||
+            !int.TryParse(TypingIntervalMaximumBox.Text, out var typingIntervalMaximum) ||
+            !int.TryParse(TypingBurstMinimumBox.Text, out var typingBurstMinimum) ||
+            !int.TryParse(TypingBurstMaximumBox.Text, out var typingBurstMaximum) ||
+            !int.TryParse(SpaceMinimumBox.Text, out var spaceMinimum) ||
+            !int.TryParse(SpaceMaximumBox.Text, out var spaceMaximum))
         {
-            ShowError("Enter whole numbers for the interval, auto-stop, and resume-delay fields.");
+            ShowError("Enter whole numbers in all interval, burst-size, space-frequency, auto-stop, and resume-delay fields.");
             return;
         }
 
@@ -140,6 +159,13 @@ public partial class OptionsWindow : Window
                 .Select(pair => pair.Key)
                 .ToList(),
             TypingEnabled = TypingEnabledBox.IsChecked ?? false,
+            TypingIntervalMinimumSeconds = typingIntervalMinimum,
+            TypingIntervalMaximumSeconds = typingIntervalMaximum,
+            TypingBurstMinimumCharacters = typingBurstMinimum,
+            TypingBurstMaximumCharacters = typingBurstMaximum,
+            TypingSpacesEnabled = TypingSpacesBox.IsChecked ?? false,
+            SpaceMinimumCharacters = spaceMinimum,
+            SpaceMaximumCharacters = spaceMaximum,
             Aggressiveness = AggressivenessSlider.Value,
             UserIdleSeconds = userIdleSeconds,
             ShowSessionInfo = ShowSessionInfoBox.IsChecked ?? false,

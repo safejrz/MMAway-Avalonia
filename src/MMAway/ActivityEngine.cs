@@ -33,6 +33,7 @@ public sealed class ActivityEngine
     private long paceCount;
     private PixelPoint? lastInjectedPosition;
     private int completedActivities;
+    private int charactersUntilNextSpace;
     private static readonly TimeSpan CursorPollInterval = TimeSpan.FromMilliseconds(100);
     private MovementPattern? lastPattern;
     private int typingCyclesSinceSelection;
@@ -58,6 +59,7 @@ public sealed class ActivityEngine
     {
         if (IsRunning) return;
         Volatile.Write(ref completedActivities, 0);
+        charactersUntilNextSpace = 0;
         sessionClock.Restart();
         cts = new CancellationTokenSource();
         var ct = cts.Token;
@@ -90,13 +92,29 @@ public sealed class ActivityEngine
             if (!RunPattern(ct)) return Task.CompletedTask;
             Interlocked.Increment(ref completedActivities);
 
-            var delay = random.Next(10000, 15000);
+            var scheduleClock = System.Diagnostics.Stopwatch.StartNew();
+            var nextActivityAt = scheduleClock.ElapsedMilliseconds + random.Next(10000, 15000);
+            var nextTypingAt = scheduleClock.ElapsedMilliseconds + NextTypingInterval();
             while (!ct.IsCancellationRequested)
             {
-                if (ct.WaitHandle.WaitOne(delay)) break;
-                if (!Step(ct)) break;
-                Interlocked.Increment(ref completedActivities);
-                delay = NextActivityInterval();
+                var currentSettings = getSettings();
+                var typingDue = currentSettings.TypingEnabled && nextTypingAt <= nextActivityAt;
+                var nextDueAt = typingDue ? nextTypingAt : nextActivityAt;
+                var remaining = nextDueAt - scheduleClock.ElapsedMilliseconds;
+                if (remaining > 0 && !Pause((int)Math.Min(remaining, int.MaxValue), ct)) break;
+                if (ct.IsCancellationRequested) break;
+
+                if (typingDue)
+                {
+                    if (!WriteRandomText(ct)) break;
+                    nextTypingAt = scheduleClock.ElapsedMilliseconds + NextTypingInterval();
+                }
+                else
+                {
+                    if (!Step(ct)) break;
+                    Interlocked.Increment(ref completedActivities);
+                    nextActivityAt = scheduleClock.ElapsedMilliseconds + NextActivityInterval();
+                }
             }
             return Task.CompletedTask;
         }
@@ -109,7 +127,7 @@ public sealed class ActivityEngine
     private bool Step(CancellationToken ct)
     {
         if (!WaitForUserMovement(0, ct)) return false;
-        if (!RandomMove(ct) || !WriteRandomText(ct)) return false;
+        if (!RandomMove(ct)) return false;
 
         if (pass == 0)
         {
@@ -119,7 +137,7 @@ public sealed class ActivityEngine
 
         if (pass > 2 && random.Next(0, 3) <= pass)
         {
-            if (!RunPattern(ct) || !WriteRandomText(ct)) return false;
+            if (!RunPattern(ct)) return false;
         }
 
         if (pass >= 4)
@@ -226,12 +244,24 @@ public sealed class ActivityEngine
     {
         if (!getSettings().TypingEnabled) return !ct.IsCancellationRequested;
 
-        var repeat = random.Next(2, 7);
+        var settings = getSettings();
+        var repeat = random.Next(
+            settings.TypingBurstMinimumCharacters,
+            settings.TypingBurstMaximumCharacters + 1);
         for (var i = 0; i < repeat; i++)
         {
             if (ct.IsCancellationRequested) return false;
-            appendText(((char)random.Next(48, 122)).ToString());
-            if (!WaitForUserMovement(repeat * random.Next(20, 100), ct)) return false;
+            if (settings.TypingSpacesEnabled && charactersUntilNextSpace == 0)
+            {
+                appendText(" ");
+                charactersUntilNextSpace = NextSpaceFrequency(settings);
+            }
+            else
+            {
+                appendText(((char)random.Next(48, 122)).ToString());
+                if (settings.TypingSpacesEnabled) charactersUntilNextSpace--;
+            }
+            if (!WaitForUserMovement(random.Next(40, 601), ct)) return false;
         }
 
         typingCyclesSinceSelection++;
@@ -366,6 +396,15 @@ public sealed class ActivityEngine
         var settings = getSettings();
         return random.Next(settings.IntervalMinimumSeconds, settings.IntervalMaximumSeconds + 1) * 1000;
     }
+
+    private int NextTypingInterval()
+    {
+        var settings = getSettings();
+        return random.Next(settings.TypingIntervalMinimumSeconds, settings.TypingIntervalMaximumSeconds + 1) * 1000;
+    }
+
+    private int NextSpaceFrequency(ActivitySettings settings) =>
+        random.Next(settings.SpaceMinimumCharacters, settings.SpaceMaximumCharacters + 1);
 
     private void BeginPaced(int expectedMoves, ActivitySettings settings)
     {
