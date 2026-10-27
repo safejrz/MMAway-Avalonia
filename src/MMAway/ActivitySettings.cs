@@ -4,10 +4,10 @@ using MMAway.Input;
 
 public sealed record ActivitySettings
 {
-    public int IntervalMinimumSeconds { get; init; } = 5;
-    public int IntervalMaximumSeconds { get; init; } = 15;
-    public int TypingIntervalMinimumSeconds { get; init; } = 5;
-    public int TypingIntervalMaximumSeconds { get; init; } = 15;
+    public int IntervalMinimumSeconds { get; init; } = 4;
+    public int IntervalMaximumSeconds { get; init; } = 14;
+    public int TypingIntervalMinimumSeconds { get; init; } = 2;
+    public int TypingIntervalMaximumSeconds { get; init; } = 12;
     public int TypingBurstMinimumCharacters { get; init; } = 2;
     public int TypingBurstMaximumCharacters { get; init; } = 20;
     public bool TypingSpacesEnabled { get; init; } = true;
@@ -15,7 +15,7 @@ public sealed record ActivitySettings
     public int SpaceMaximumCharacters { get; init; } = 6;
     public List<string> SelectedPatterns { get; init; } = [.. Enum.GetNames<MovementPattern>()];
     public bool TypingEnabled { get; init; } = true;
-    public double Aggressiveness { get; init; } = 1.0;
+    public double Aggressiveness { get; init; } = 1.5;
     public int UserIdleSeconds { get; init; } = 10;
     public bool ShowSessionInfo { get; init; }
     public int AutoStopMinutes { get; init; }

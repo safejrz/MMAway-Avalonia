@@ -28,11 +28,11 @@
             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
               <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="Minimum" />
-                <TextBox Name="MinimumIntervalBox" Watermark="5" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="MinimumIntervalBox" Watermark="4" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="4">
                 <TextBlock Text="Maximum" />
-                <TextBox Name="MaximumIntervalBox" Watermark="15" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="MaximumIntervalBox" Watermark="14" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
             </Grid>
           </StackPanel>
@@ -71,7 +71,7 @@
             <Slider Name="AggressivenessSlider" HorizontalAlignment="Stretch"
                     Minimum="0.5" Maximum="3" TickFrequency="0.1" IsSnapToTickEnabled="True" />
             <TextBlock Name="AggressivenessValue" HorizontalAlignment="Stretch" TextAlignment="Right" />
-            <TextBlock Text="Scales each movement's 2–5 second duration: 0.5x is slower, 1.0x is current, 3.0x is faster."
+            <TextBlock Text="Scales each movement's 2–5 second duration: 0.5x is slower, 1.5x is current, 3.0x is faster."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
         </StackPanel>
@@ -87,11 +87,11 @@
             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
               <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="Minimum" />
-                <TextBox Name="TypingIntervalMinimumBox" Watermark="5" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="TypingIntervalMinimumBox" Watermark="2" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="4">
                 <TextBlock Text="Maximum" />
-                <TextBox Name="TypingIntervalMaximumBox" Watermark="15" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="TypingIntervalMaximumBox" Watermark="12" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
             </Grid>
           </StackPanel>
