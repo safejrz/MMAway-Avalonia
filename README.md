@@ -7,13 +7,17 @@ Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/M
 - Random typing into its own text box.
 - Keep-awake: `SetThreadExecutionState` on Windows, a `systemd-inhibit` idle/sleep lock on Linux.
 - The window icon switches between stopped and running.
+- Configurable global hotkey to start or stop activity.
+- Optional auto-stop after a configured number of minutes (0 disables it).
 
 ## Platform support
-| OS | Input | Keep-awake |
-|----|-------|-----------|
-| Windows 10/11 | `user32` (`SetCursorPos`, `mouse_event`) | `SetThreadExecutionState` |
-| Linux, X11 session (Mint Cinnamon, etc.) | XTest (`libX11`, `libXtst`) | `systemd-inhibit` |
-| Linux, Wayland session | Only reaches XWayland apps (a warning is shown) | `systemd-inhibit` |
+| OS | Input | Keep-awake | Global hotkey |
+|----|-------|-----------|--------------|
+| Windows 10/11 | `user32` (`SetCursorPos`, `mouse_event`) | `SetThreadExecutionState` | `RegisterHotKey` |
+| Linux, X11 session (Mint Cinnamon, etc.) | XTest (`libX11`, `libXtst`) | `systemd-inhibit` | X11 key grab |
+| Linux, Wayland session | Only reaches XWayland apps (a warning is shown) | `systemd-inhibit` | Not supported |
+
+The default global shortcut is `Ctrl+Alt+M`. It can be changed in Options using Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab. If the shortcut is already taken by another app, MMAway reports that it could not register it. Configure auto-stop in Options; `0` minutes disables it.
 
 On Linux, install `libxtst6` if it is missing (`sudo apt install libxtst6`).
 

@@ -42,7 +42,11 @@ public static class MovementPatternLibrary
         ], segments);
 
     public static IReadOnlyList<Point> CreateHorizontalHourglass(int segments = DefaultSegments) =>
-        SamplePolyline([new(-0.52, 0), new(0, -0.82), new(0.85, 0), new(0, 0.82)],
+        SamplePolyline(
+            [
+                new(-0.9, -0.45), new(0, -0.16), new(0.9, -0.45),
+                new(0.9, 0.45), new(0, 0.16), new(-0.9, 0.45)
+            ],
             segments, close: true);
 
     public static IReadOnlyList<Point> CreateSpiralOut(int segments = DefaultSegments) =>

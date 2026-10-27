@@ -12,14 +12,14 @@
           <StackPanel Spacing="4">
             <TextBlock Text="Global hotkey" FontSize="16" FontWeight="SemiBold" />
             <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+M" Width="114" HorizontalAlignment="Left" />
-            <TextBlock Text="Saved for the tray/hotkey feature; global registration is not active yet."
+            <TextBlock Text="Use Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
 
           <StackPanel Spacing="4">
             <TextBlock Text="Auto-stop (minutes; 0 disables)" FontSize="16" FontWeight="SemiBold" />
             <TextBox Name="AutoStopBox" Watermark="0" Width="204" HorizontalAlignment="Left" />
-            <TextBlock Text="Saved now; automatic stopping will be activated in the tray/auto-stop feature."
+            <TextBlock Text="Activity stops automatically after this many minutes. Enter 0 to disable auto-stop."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
 
@@ -45,7 +45,7 @@
         <StackPanel Spacing="18" Margin="12">
           <StackPanel Spacing="4">
             <TextBlock Text="Resume after cursor is idle (seconds)" FontSize="16" FontWeight="SemiBold" />
-            <TextBox Name="UserIdleSecondsBox" Watermark="45" Width="85" HorizontalAlignment="Left" />
+            <TextBox Name="UserIdleSecondsBox" Watermark="10" Width="85" HorizontalAlignment="Left" />
             <TextBlock Text="Automated activity resumes after the cursor remains still for this long."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
@@ -100,11 +100,11 @@
             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
               <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="Minimum" />
-                <TextBox Name="TypingBurstMinimumBox" Watermark="3" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="TypingBurstMinimumBox" Watermark="2" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="4">
                 <TextBlock Text="Maximum" />
-                <TextBox Name="TypingBurstMaximumBox" Watermark="32" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="TypingBurstMaximumBox" Watermark="20" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
             </Grid>
           </StackPanel>
@@ -114,7 +114,7 @@
             <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
               <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="Minimum" />
-                <TextBox Name="SpaceMinimumBox" Watermark="2" Width="85" HorizontalAlignment="Left" />
+                <TextBox Name="SpaceMinimumBox" Watermark="0" Width="85" HorizontalAlignment="Left" />
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="4">
                 <TextBlock Text="Maximum" />

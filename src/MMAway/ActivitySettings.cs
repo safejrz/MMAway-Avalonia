@@ -1,20 +1,22 @@
 namespace MMAway;
 
+using MMAway.Input;
+
 public sealed record ActivitySettings
 {
     public int IntervalMinimumSeconds { get; init; } = 5;
     public int IntervalMaximumSeconds { get; init; } = 15;
     public int TypingIntervalMinimumSeconds { get; init; } = 5;
     public int TypingIntervalMaximumSeconds { get; init; } = 15;
-    public int TypingBurstMinimumCharacters { get; init; } = 3;
-    public int TypingBurstMaximumCharacters { get; init; } = 32;
+    public int TypingBurstMinimumCharacters { get; init; } = 2;
+    public int TypingBurstMaximumCharacters { get; init; } = 20;
     public bool TypingSpacesEnabled { get; init; } = true;
-    public int SpaceMinimumCharacters { get; init; } = 2;
+    public int SpaceMinimumCharacters { get; init; } = 0;
     public int SpaceMaximumCharacters { get; init; } = 6;
     public List<string> SelectedPatterns { get; init; } = [.. Enum.GetNames<MovementPattern>()];
     public bool TypingEnabled { get; init; } = true;
     public double Aggressiveness { get; init; } = 1.0;
-    public int UserIdleSeconds { get; init; } = 45;
+    public int UserIdleSeconds { get; init; } = 10;
     public bool ShowSessionInfo { get; init; }
     public int AutoStopMinutes { get; init; }
     public string GlobalHotkey { get; init; } = "Ctrl+Alt+M";
@@ -33,8 +35,8 @@ public sealed record ActivitySettings
             throw new ArgumentOutOfRangeException(nameof(TypingBurstMinimumCharacters), "Minimum burst size must be between 1 and 100 characters.");
         if (TypingBurstMaximumCharacters < TypingBurstMinimumCharacters || TypingBurstMaximumCharacters > 100)
             throw new ArgumentOutOfRangeException(nameof(TypingBurstMaximumCharacters), "Maximum burst size must be at least the minimum and no more than 100 characters.");
-        if (SpaceMinimumCharacters is < 1 or > 100)
-            throw new ArgumentOutOfRangeException(nameof(SpaceMinimumCharacters), "Minimum characters between spaces must be between 1 and 100.");
+        if (SpaceMinimumCharacters is < 0 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(SpaceMinimumCharacters), "Minimum characters between spaces must be between 0 and 100.");
         if (SpaceMaximumCharacters < SpaceMinimumCharacters || SpaceMaximumCharacters > 100)
             throw new ArgumentOutOfRangeException(nameof(SpaceMaximumCharacters), "Maximum characters between spaces must be at least the minimum and no more than 100.");
         if (SelectedPatterns.Count == 0)
@@ -50,5 +52,6 @@ public sealed record ActivitySettings
             throw new ArgumentOutOfRangeException(nameof(AutoStopMinutes), "Auto-stop must be between 0 and 1440 minutes.");
         if (string.IsNullOrWhiteSpace(GlobalHotkey))
             throw new ArgumentException("Global hotkey cannot be empty.", nameof(GlobalHotkey));
+        _ = HotkeyGesture.Parse(GlobalHotkey);
     }
 }

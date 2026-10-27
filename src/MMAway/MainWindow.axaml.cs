@@ -18,10 +18,14 @@ public partial class MainWindow : Window
     private readonly SettingsStore settingsStore = new();
     private ActivitySettings settings = new();
     private string sessionWarning = string.Empty;
+    private string hotkeyWarning = string.Empty;
     private readonly RotateTransform leftSpinnerRotation = new();
     private readonly RotateTransform rightSpinnerRotation = new();
     private readonly DispatcherTimer spinnerTimer = new() { Interval = TimeSpan.FromMilliseconds(20) };
     private readonly DispatcherTimer sessionStatsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer autoStopTimer = new();
+    private IGlobalHotkey? globalHotkey;
+    private bool isStopping;
 
     public MainWindow()
     {
@@ -34,6 +38,7 @@ public partial class MainWindow : Window
             rightSpinnerRotation.Angle = (rightSpinnerRotation.Angle + 6) % 360;
         };
         sessionStatsTimer.Tick += (_, _) => UpdateRunningStats();
+        autoStopTimer.Tick += OnAutoStopTimerTick;
         Opened += OnOpened;
         Closing += OnClosing;
         PositionChanged += (_, _) => UpdateWindowBounds();
@@ -86,14 +91,17 @@ public partial class MainWindow : Window
                 text => Dispatcher.UIThread.Post(() => AppendOutputText(text)),
                 () => Dispatcher.UIThread.Post(SelectRandomOutputText),
                 () => Dispatcher.UIThread.Post(() => OutputBox.Clear()));
-            sessionWarning = PlatformServices.GetSessionWarning() ?? string.Empty;
-            SetStatusText(sessionWarning);
         }
         catch (Exception ex)
         {
             ToggleButton.IsEnabled = false;
             SetStatusText(ex.Message);
+            return;
         }
+
+        hotkeyWarning = TryConfigureGlobalHotkey(settings.GlobalHotkey) ?? string.Empty;
+        sessionWarning = PlatformServices.GetSessionWarning() ?? string.Empty;
+        SetStatusText(GetCurrentWarning());
     }
 
     private void AppendOutputText(string text)
@@ -120,21 +128,16 @@ public partial class MainWindow : Window
         OutputBox.SelectionEnd = start + selectedLength;
     }
 
-    private async void OnToggleClick(object? sender, RoutedEventArgs e)
+    private async void OnToggleClick(object? sender, RoutedEventArgs e) =>
+        await ToggleActivityAsync();
+
+    private async Task ToggleActivityAsync()
     {
         if (engine is null || keepAwake is null || input is null) return;
 
         if (engine.IsRunning)
         {
-            ToggleButton.IsEnabled = false;
-            await engine.StopAsync();
-            keepAwake.Disable();
-            SetRunningVisuals(false);
-            Icon = stopIcon;
-            ToggleButton.Content = "Start";
-            ToggleButton.IsEnabled = true;
-            OptionsButton.IsEnabled = true;
-            SetStatusText(settings.ShowSessionInfo ? FormatSessionStats() : sessionWarning);
+            await StopActivityAsync();
             return;
         }
 
@@ -144,6 +147,45 @@ public partial class MainWindow : Window
         Icon = runIcon;
         ToggleButton.Content = "Stop!";
         engine.Start();
+        if (settings.AutoStopMinutes > 0)
+        {
+            autoStopTimer.Interval = TimeSpan.FromMinutes(settings.AutoStopMinutes);
+            autoStopTimer.Start();
+        }
+    }
+
+    private async void OnAutoStopTimerTick(object? sender, EventArgs e)
+    {
+        autoStopTimer.Stop();
+        await StopActivityAsync();
+    }
+
+    private async Task StopActivityAsync()
+    {
+        if (engine?.IsRunning != true || isStopping || keepAwake is null) return;
+        isStopping = true;
+        autoStopTimer.Stop();
+        ToggleButton.IsEnabled = false;
+        try
+        {
+            await engine.StopAsync();
+            keepAwake.Disable();
+            SetRunningVisuals(false);
+            Icon = stopIcon;
+            ToggleButton.Content = "Start";
+            OptionsButton.IsEnabled = true;
+            var status = GetIdleStatus();
+            SetStatusText(status);
+        }
+        catch (Exception ex)
+        {
+            SetStatusText($"Could not stop activity: {ex.Message}");
+        }
+        finally
+        {
+            ToggleButton.IsEnabled = true;
+            isStopping = false;
+        }
     }
 
     private async void OnOptionsClick(object? sender, RoutedEventArgs e)
@@ -155,9 +197,12 @@ public partial class MainWindow : Window
         try
         {
             await settingsStore.SaveAsync(updatedSettings);
+            var oldHotkey = settings.GlobalHotkey;
             Volatile.Write(ref settings, updatedSettings);
+            if (!string.Equals(oldHotkey, updatedSettings.GlobalHotkey, StringComparison.OrdinalIgnoreCase))
+                hotkeyWarning = TryConfigureGlobalHotkey(updatedSettings.GlobalHotkey) ?? string.Empty;
             if (engine?.IsRunning != true)
-                SetStatusText(settings.ShowSessionInfo ? FormatSessionStats() : sessionWarning);
+                SetStatusText(GetIdleStatus());
         }
         catch (Exception ex)
         {
@@ -182,6 +227,46 @@ public partial class MainWindow : Window
         WindowState = WindowState.Minimized;
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnGlobalHotkeyPressed() =>
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                await ToggleActivityAsync();
+            }
+            catch (Exception ex)
+            {
+                SetStatusText($"Global hotkey action failed: {ex.Message}");
+            }
+        });
+
+    private string? TryConfigureGlobalHotkey(string shortcut)
+    {
+        try
+        {
+            var replacement = PlatformServices.CreateGlobalHotkey(shortcut, OnGlobalHotkeyPressed);
+            var previous = globalHotkey;
+            globalHotkey = replacement;
+            previous?.Dispose();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return $"Global hotkey unavailable: {ex.Message}";
+        }
+    }
+
+    private string GetCurrentWarning() =>
+        string.Join(" ", new[] { sessionWarning, hotkeyWarning }
+            .Where(message => !string.IsNullOrWhiteSpace(message)));
+
+    private string GetIdleStatus()
+    {
+        var session = settings.ShowSessionInfo ? FormatSessionStats() : string.Empty;
+        var warning = GetCurrentWarning();
+        return string.Join(" ", new[] { session, warning }.Where(message => !string.IsNullOrWhiteSpace(message)));
+    }
 
     private void SetRunningVisuals(bool isRunning)
     {
@@ -219,7 +304,9 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        autoStopTimer.Stop();
         SetRunningVisuals(false);
+        globalHotkey?.Dispose();
         engine?.StopAsync().GetAwaiter().GetResult();
         keepAwake?.Dispose();
         input?.Dispose();

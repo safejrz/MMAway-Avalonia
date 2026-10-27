@@ -2,6 +2,27 @@ namespace MMAway.Input;
 
 internal static class PlatformServices
 {
+    public static void Initialize()
+    {
+        if (OperatingSystem.IsLinux())
+            X11Input.InitializeThreads();
+    }
+
+    public static IGlobalHotkey CreateGlobalHotkey(string shortcut, Action pressed)
+    {
+        var gesture = HotkeyGesture.Parse(shortcut);
+        if (OperatingSystem.IsWindows()) return new WindowsGlobalHotkey(gesture, pressed);
+        if (OperatingSystem.IsLinux())
+        {
+            if (string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland",
+                    StringComparison.OrdinalIgnoreCase))
+                throw new PlatformNotSupportedException("Global hotkeys are not supported in Wayland sessions. Use an X11 session.");
+            return new X11GlobalHotkey(gesture, pressed);
+        }
+
+        throw new PlatformNotSupportedException("Global hotkeys are supported on Windows and Linux X11.");
+    }
+
     public static IInputInjector CreateInput()
     {
         if (OperatingSystem.IsWindows()) return new WindowsInput();

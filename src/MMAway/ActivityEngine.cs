@@ -330,10 +330,14 @@ public sealed class ActivityEngine
 
         return points.Select(point =>
         {
-            var scaleX = pattern is MovementPattern.Circle or MovementPattern.SpiralOut or MovementPattern.SpiralIn
+            var preservesAspectRatio = pattern is MovementPattern.Circle
+                or MovementPattern.SpiralOut
+                or MovementPattern.SpiralIn
+                or MovementPattern.HorizontalHourglass;
+            var scaleX = preservesAspectRatio
                 ? radius
                 : halfWidth;
-            var scaleY = pattern is MovementPattern.Circle or MovementPattern.SpiralOut or MovementPattern.SpiralIn
+            var scaleY = preservesAspectRatio
                 ? radius
                 : halfHeight;
             return new PixelPoint(

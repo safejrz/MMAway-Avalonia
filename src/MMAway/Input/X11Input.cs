@@ -19,6 +19,15 @@ internal sealed class X11Input : IInputInjector
     private static extern IntPtr XOpenDisplay(string? name);
 
     [DllImport(LibX11)]
+    private static extern int XInitThreads();
+
+    internal static void InitializeThreads()
+    {
+        if (XInitThreads() == 0)
+            throw new InvalidOperationException("X11 thread support could not be initialized.");
+    }
+
+    [DllImport(LibX11)]
     private static extern int XCloseDisplay(IntPtr display);
 
     [DllImport(LibX11)]
