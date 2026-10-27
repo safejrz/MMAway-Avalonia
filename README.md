@@ -19,12 +19,15 @@ Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/M
 
 The default global shortcut is `Ctrl+Alt+M`. It can be changed in Options using Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab. If the shortcut is already taken by another app, MMAway reports that it could not register it. Configure auto-stop in Options; `0` minutes disables it.
 
+Activity pauses when user mouse activity is detected and resumes after the configured idle delay. On Windows, a native mouse hook ignores injected input and movement to positions injected in the last two seconds, including delayed VM/remote-desktop pointer echoes. A real click still pauses activity, even at an injected position. On X11, cursor-position polling is used. Typing begins after the initial movement pattern completes.
+
 On Linux, install `libxtst6` if it is missing (`sudo apt install libxtst6`).
 
 ## Build and run
 ```bash
 dotnet run --project src/MMAway
 ```
+Run the regression tests with `dotnet test MMAway.slnx`.
 
 ## Publish self-contained builds
 ```bash

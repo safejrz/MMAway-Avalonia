@@ -32,6 +32,7 @@ public sealed class ActivityEngine
     private double paceIntervalMs;
     private long paceCount;
     private PixelPoint? lastInjectedPosition;
+    private uint? lastUserInputVersion;
     private int completedActivities;
     private int charactersUntilNextSpace;
     private static readonly TimeSpan CursorPollInterval = TimeSpan.FromMilliseconds(100);
@@ -88,6 +89,7 @@ public sealed class ActivityEngine
         try
         {
             if (ct.IsCancellationRequested) return Task.CompletedTask;
+            lastUserInputVersion = input.UserInputVersion;
             MoveTo(Center);
             if (!RunPattern(ct)) return Task.CompletedTask;
             Interlocked.Increment(ref completedActivities);
@@ -194,7 +196,7 @@ public sealed class ActivityEngine
 
             var waitMilliseconds = (int)Math.Clamp(remaining, 1, CursorPollInterval.TotalMilliseconds);
             if (!Pause(waitMilliseconds, runToken)) return false;
-            if (lastInjectedPosition is not { } expected || input.GetCursorPosition() == expected) continue;
+            if (!HasUserInput()) continue;
             if (!WaitForUserIdle(runToken)) return false;
             paceClock.Restart();
             paceCount = 0;
@@ -207,21 +209,33 @@ public sealed class ActivityEngine
     private bool WaitForUserIdle(CancellationToken ct)
     {
         var idleThreshold = TimeSpan.FromSeconds(getSettings().UserIdleSeconds);
-        var previousPosition = input.GetCursorPosition();
+        var previousVersion = input.UserInputVersion;
+        var previousPosition = previousVersion.HasValue ? default : input.GetCursorPosition();
         var idleClock = System.Diagnostics.Stopwatch.StartNew();
         while (idleClock.Elapsed < idleThreshold)
         {
             if (!Pause((int)CursorPollInterval.TotalMilliseconds, ct)) return false;
-            var currentPosition = input.GetCursorPosition();
-            if (currentPosition == previousPosition) continue;
+            var currentVersion = input.UserInputVersion;
+            var currentPosition = currentVersion.HasValue ? default : input.GetCursorPosition();
+            var changed = currentVersion.HasValue
+                ? currentVersion != previousVersion
+                : currentPosition != previousPosition;
+            if (!changed) continue;
 
+            previousVersion = currentVersion;
             previousPosition = currentPosition;
             idleClock.Restart();
         }
 
-        lastInjectedPosition = previousPosition;
-        return true;
+        lastUserInputVersion = previousVersion;
+        lastInjectedPosition = input.GetCursorPosition();
+        return !ct.IsCancellationRequested;
     }
+
+    private bool HasUserInput() =>
+        input.UserInputVersion is { } version
+            ? version != lastUserInputVersion
+            : lastInjectedPosition is { } expected && input.GetCursorPosition() != expected;
 
     private bool WaitForUserMovement(int milliseconds, CancellationToken ct)
     {
@@ -229,7 +243,7 @@ public sealed class ActivityEngine
         while (true)
         {
             if (ct.IsCancellationRequested) return false;
-            if (lastInjectedPosition is { } expected && input.GetCursorPosition() != expected)
+            if (HasUserInput())
             {
                 if (!WaitForUserIdle(ct)) return false;
             }

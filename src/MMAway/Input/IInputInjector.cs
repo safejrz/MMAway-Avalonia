@@ -7,6 +7,9 @@ namespace MMAway.Input;
 /// </summary>
 public interface IInputInjector : IDisposable
 {
+    // Null means the platform uses cursor-position polling instead.
+    uint? UserInputVersion => null;
+
     PixelPoint GetCursorPosition();
 
     void SetCursorPosition(PixelPoint position);
