@@ -3,7 +3,7 @@
 Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/MMAway): a small tool that emulates mouse movement, clicks and typing so chat apps (e.g. MS Teams) don't flip to "Away", and keeps the machine from sleeping while it runs.
 
 ## Features
-- Random mouse jitter, square / figure-eight patterns and a click on its own window.
+- Random mouse jitter, square / figure-eight patterns and a click in the center of its activity text box while the window is active.
 - Random typing into its own text box.
 - Keep-awake: `SetThreadExecutionState` on Windows, a `systemd-inhibit` idle/sleep lock on Linux.
 - The window icon switches between stopped and running.

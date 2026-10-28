@@ -24,6 +24,42 @@ public sealed class ActivityEngineTests
         }
     }
 
+    [Fact]
+    public async Task PatternClickUsesProvidedTarget()
+    {
+        var target = new PixelPoint(175, 250);
+        using var input = new TestInput();
+        var engine = CreateEngine(input, clickTarget: target);
+        engine.Start();
+        try
+        {
+            await WaitUntilAsync(() => input.ClickCount > 0);
+            Assert.Equal(target, input.LastClickPosition);
+        }
+        finally
+        {
+            await engine.StopAsync();
+        }
+    }
+
+    [Fact]
+    public async Task PatternClickIsSkippedWhenWindowCannotClick()
+    {
+        using var input = new TestInput();
+        var engine = CreateEngine(input, canClick: false);
+        engine.Start();
+        try
+        {
+            await WaitUntilAsync(() => engine.ActivityCount >= 1);
+            Assert.Equal(0, input.ClickCount);
+            Assert.True(input.MoveCount > 0);
+        }
+        finally
+        {
+            await engine.StopAsync();
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -72,8 +108,11 @@ public sealed class ActivityEngineTests
         }
     }
 
-    private static ActivityEngine CreateEngine(TestInput input, Action<string>? append = null) =>
+    private static ActivityEngine CreateEngine(TestInput input, Action<string>? append = null,
+        PixelPoint? clickTarget = null, bool canClick = true) =>
         new(input, () => new PixelRect(0, 0, 350, 500),
+            () => clickTarget ?? new PixelPoint(175, 250),
+            () => canClick,
             () => new ActivitySettings
             {
                 Aggressiveness = 3,
@@ -102,12 +141,24 @@ public sealed class ActivityEngineTests
         private PixelPoint position;
         private int version;
         private int moveCount;
+        private int clickCount;
 
         public bool MonitorSupported { get; init; } = true;
         public int CursorOffset { get; init; }
         public int SimulateInputAfterMoveCount { get; init; }
         public uint? UserInputVersion => MonitorSupported ? unchecked((uint)Volatile.Read(ref version)) : null;
         public int MoveCount => Volatile.Read(ref moveCount);
+        public int ClickCount => Volatile.Read(ref clickCount);
+        public PixelPoint? LastClickPosition
+        {
+            get
+            {
+                lock (gate)
+                    return lastClickPosition;
+            }
+        }
+
+        private PixelPoint? lastClickPosition;
 
         public PixelPoint GetCursorPosition()
         {
@@ -125,6 +176,9 @@ public sealed class ActivityEngineTests
 
         public void LeftClick()
         {
+            lock (gate)
+                lastClickPosition = position;
+            Interlocked.Increment(ref clickCount);
         }
 
         public void SimulateUserInput()

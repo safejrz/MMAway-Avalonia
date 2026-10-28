@@ -41,6 +41,8 @@ public partial class MainWindow : Window
         autoStopTimer.Tick += OnAutoStopTimerTick;
         Opened += OnOpened;
         Closing += OnClosing;
+        Activated += (_, _) => UpdateWindowBounds();
+        Deactivated += (_, _) => UpdateWindowBounds();
         PositionChanged += (_, _) => UpdateWindowBounds();
         Resized += (_, _) => UpdateWindowBounds();
         PropertyChanged += (_, e) =>
@@ -51,9 +53,10 @@ public partial class MainWindow : Window
 
     // The engine thread must not touch Avalonia properties, so the effective bounds are
     // resolved on the UI thread and published as a single immutable reference.
-    private sealed record BoundsSnapshot(PixelRect Rect);
+    private sealed record BoundsSnapshot(PixelRect Rect, PixelPoint OutputCenter, bool CanClick);
 
-    private BoundsSnapshot currentBounds = new(new PixelRect(0, 0, 1024, 768));
+    private BoundsSnapshot currentBounds =
+        new(new PixelRect(0, 0, 1024, 768), new PixelPoint(512, 384), false);
     private PixelRect screenBounds = new(0, 0, 1024, 768);
 
     // Falls back to the screen when the window is minimized or not measured yet.
@@ -64,10 +67,17 @@ public partial class MainWindow : Window
         var rect = new PixelRect(origin.X, origin.Y,
             (int)(ClientSize.Width * scale), (int)(ClientSize.Height * scale));
         var useScreen = WindowState == WindowState.Minimized || rect.Width <= 0 || rect.Height <= 0;
-        Volatile.Write(ref currentBounds, new BoundsSnapshot(useScreen ? screenBounds : rect));
+        var outputCenter = OutputBox.Bounds.Width > 0 && OutputBox.Bounds.Height > 0
+            ? OutputBox.PointToScreen(new Point(OutputBox.Bounds.Width / 2, OutputBox.Bounds.Height / 2))
+            : rect.Center;
+        Volatile.Write(ref currentBounds,
+            new BoundsSnapshot(useScreen ? screenBounds : rect, outputCenter,
+                IsActive && WindowState != WindowState.Minimized));
     }
 
     private PixelRect GetBounds() => Volatile.Read(ref currentBounds).Rect;
+    private PixelPoint GetOutputCenter() => Volatile.Read(ref currentBounds).OutputCenter;
+    private bool CanClick() => Volatile.Read(ref currentBounds).CanClick;
 
     private static WindowIcon LoadIcon(string name) =>
         new(Avalonia.Platform.AssetLoader.Open(new Uri($"avares://MMAway/Assets/{name}")));
@@ -87,6 +97,8 @@ public partial class MainWindow : Window
             engine = new ActivityEngine(
                 input,
                 GetBounds,
+                GetOutputCenter,
+                CanClick,
                 () => Volatile.Read(ref settings),
                 text => Dispatcher.UIThread.Post(() => AppendOutputText(text)),
                 () => Dispatcher.UIThread.Post(SelectRandomOutputText),

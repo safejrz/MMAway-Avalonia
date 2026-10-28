@@ -13,6 +13,8 @@ public sealed class ActivityEngine
     private readonly IInputInjector input;
     private readonly Random random = new();
     private readonly Func<PixelRect> getWindowBounds;
+    private readonly Func<PixelPoint> getClickTarget;
+    private readonly Func<bool> canClick;
     private readonly Func<ActivitySettings> getSettings;
     private readonly Action<string> appendText;
     private readonly Action selectRandomText;
@@ -40,12 +42,15 @@ public sealed class ActivityEngine
     private int typingCyclesSinceSelection;
     private int nextSelectionAfter = 3;
 
-    public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds,
+    public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds, Func<PixelPoint> getClickTarget,
+        Func<bool> canClick,
         Func<ActivitySettings> getSettings,
         Action<string> appendText, Action selectRandomText, Action clearText)
     {
         this.input = input;
         this.getWindowBounds = getWindowBounds;
+        this.getClickTarget = getClickTarget;
+        this.canClick = canClick;
         this.getSettings = getSettings;
         this.appendText = appendText;
         this.selectRandomText = selectRandomText;
@@ -362,9 +367,10 @@ public sealed class ActivityEngine
 
     private void ClickOnWindow()
     {
+        if (!canClick()) return;
+
         var original = input.GetCursorPosition();
-        var area = Area;
-        MoveTo(new PixelPoint(area.X + 2, area.Y + 2));
+        MoveTo(getClickTarget());
         input.LeftClick();
         MoveTo(original);
     }
