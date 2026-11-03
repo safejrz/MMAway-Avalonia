@@ -12,7 +12,7 @@ public sealed class ActivityEngine
 
     private readonly IInputInjector input;
     private readonly Random random = new();
-    private readonly Func<PixelRect> getWindowBounds;
+    private readonly Func<PixelRect?> getActivityBounds;
     private readonly Func<PixelPoint> getClickTarget;
     private readonly Func<bool> canClick;
     private readonly Func<ActivitySettings> getSettings;
@@ -42,13 +42,13 @@ public sealed class ActivityEngine
     private int typingCyclesSinceSelection;
     private int nextSelectionAfter = 3;
 
-    public ActivityEngine(IInputInjector input, Func<PixelRect> getWindowBounds, Func<PixelPoint> getClickTarget,
+    public ActivityEngine(IInputInjector input, Func<PixelRect?> getActivityBounds, Func<PixelPoint> getClickTarget,
         Func<bool> canClick,
         Func<ActivitySettings> getSettings,
         Action<string> appendText, Action selectRandomText, Action clearText)
     {
         this.input = input;
-        this.getWindowBounds = getWindowBounds;
+        this.getActivityBounds = getActivityBounds;
         this.getClickTarget = getClickTarget;
         this.canClick = canClick;
         this.getSettings = getSettings;
@@ -95,7 +95,8 @@ public sealed class ActivityEngine
         {
             if (ct.IsCancellationRequested) return Task.CompletedTask;
             lastUserInputVersion = input.UserInputVersion;
-            MoveTo(Center);
+            if (!WaitForArea(ct, out var area)) return Task.CompletedTask;
+            MoveTo(area.Center, area);
             if (!RunPattern(ct)) return Task.CompletedTask;
             Interlocked.Increment(ref completedActivities);
 
@@ -138,8 +139,8 @@ public sealed class ActivityEngine
 
         if (pass == 0)
         {
-            if (ct.IsCancellationRequested) return false;
-            MoveTo(Center);
+            if (!WaitForArea(ct, out var area)) return false;
+            MoveTo(area.Center, area);
         }
 
         if (pass > 2 && random.Next(0, 3) <= pass)
@@ -159,25 +160,50 @@ public sealed class ActivityEngine
         return !ct.IsCancellationRequested;
     }
 
-    // Area the cursor is allowed to occupy: the app window minus a small margin.
-    private PixelRect Area
+    private bool TryGetArea(out PixelRect area)
     {
-        get
+        if (getActivityBounds() is not { Width: > 0, Height: > 0 } bounds)
         {
-            var b = getWindowBounds();
-            var w = Math.Max(1, b.Width - 2 * EdgeMargin);
-            var h = Math.Max(1, b.Height - 2 * EdgeMargin);
-            return new PixelRect(b.X + EdgeMargin, b.Y + EdgeMargin, w, h);
+            area = default;
+            return false;
         }
+        var marginX = Math.Min(EdgeMargin, (bounds.Width - 1) / 2);
+        var marginY = Math.Min(EdgeMargin, (bounds.Height - 1) / 2);
+        area = new PixelRect(bounds.X + marginX, bounds.Y + marginY,
+            bounds.Width - 2 * marginX, bounds.Height - 2 * marginY);
+        return true;
     }
 
-    private PixelPoint Center => Area.Center;
-
-    private void MoveTo(PixelPoint target)
+    private bool WaitForArea(CancellationToken ct, out PixelRect area)
     {
-        var a = Area;
-        var x = Math.Clamp(target.X, a.X, a.Right - 1);
-        var y = Math.Clamp(target.Y, a.Y, a.Bottom - 1);
+        var waited = false;
+        while (!ct.IsCancellationRequested)
+        {
+            if (TryGetArea(out area))
+            {
+                if (waited && HasUserInput())
+                {
+                    if (!WaitForUserIdle(ct)) break;
+                    continue;
+                }
+                if (waited && paceClock.IsRunning)
+                {
+                    paceClock.Restart();
+                    paceCount = 0;
+                }
+                return true;
+            }
+            waited = true;
+            if (!Pause((int)CursorPollInterval.TotalMilliseconds, ct)) break;
+        }
+        area = default;
+        return false;
+    }
+
+    private void MoveTo(PixelPoint target, PixelRect area)
+    {
+        var x = Math.Clamp(target.X, area.X, area.Right - 1);
+        var y = Math.Clamp(target.Y, area.Y, area.Bottom - 1);
         lastInjectedPosition = new PixelPoint(x, y);
         input.SetCursorPosition(lastInjectedPosition.Value);
     }
@@ -300,20 +326,21 @@ public sealed class ActivityEngine
         lastPattern = pattern;
         if (!MovePattern(pattern, ct)) return false;
 
-        ClickOnWindow();
+        ClickOnWindow(ct);
         return !ct.IsCancellationRequested;
     }
 
     private bool MovePattern(MovementPattern pattern, CancellationToken ct)
     {
-        var points = CreatePatternPoints(pattern);
+        if (!WaitForArea(ct, out var area)) return false;
+        var points = CreatePatternPoints(pattern, area);
         BeginPaced(points.Length, getSettings());
         try
         {
             foreach (var point in points)
             {
-                if (ct.IsCancellationRequested) return false;
-                MoveTo(point);
+                if (!WaitForArea(ct, out area)) return false;
+                MoveTo(point, area);
                 if (!Pace()) return false;
             }
             return true;
@@ -324,9 +351,8 @@ public sealed class ActivityEngine
         }
     }
 
-    private PixelPoint[] CreatePatternPoints(MovementPattern pattern)
+    private PixelPoint[] CreatePatternPoints(MovementPattern pattern, PixelRect area)
     {
-        var area = Area;
         var center = area.Center;
         var radius = Math.Max(1, Math.Min(area.Width, area.Height) * 0.38);
         var halfWidth = Math.Max(1, area.Width * 0.42);
@@ -365,19 +391,31 @@ public sealed class ActivityEngine
         }).ToArray();
     }
 
-    private void ClickOnWindow()
+    private void ClickOnWindow(CancellationToken ct)
     {
-        if (!canClick()) return;
+        if (ct.IsCancellationRequested || !canClick() || HasUserInput() || !TryGetArea(out var area)) return;
 
         var original = input.GetCursorPosition();
-        MoveTo(getClickTarget());
+        var target = getClickTarget();
+        if (!Contains(area, target)) return;
+        var inputVersion = input.UserInputVersion;
+        if (inputVersion is { } version
+            ? version != lastUserInputVersion
+            : lastInjectedPosition != original) return;
+        MoveTo(target, area);
+        if (ct.IsCancellationRequested || !canClick() || input.UserInputVersion != inputVersion ||
+            !TryGetArea(out var currentArea) || currentArea != area ||
+            input.GetCursorPosition() != target) return;
+
         input.LeftClick();
-        MoveTo(original);
+        if (!ct.IsCancellationRequested && canClick() && input.UserInputVersion == inputVersion &&
+            TryGetArea(out currentArea) && currentArea == area && input.GetCursorPosition() == target)
+            MoveTo(original, area);
     }
 
     private bool RandomMove(CancellationToken ct)
     {
-        var area = Area;
+        if (!WaitForArea(ct, out var area)) return false;
         var start = input.GetCursorPosition();
         var end = new PixelPoint(
             random.Next(area.X, area.Right),
@@ -391,12 +429,13 @@ public sealed class ActivityEngine
         {
             for (var i = 1; i <= moves; i++)
             {
-                if (ct.IsCancellationRequested) return false;
+                if (!WaitForArea(ct, out area)) return false;
                 var progress = (double)i / moves;
                 var easedProgress = progress * progress * (3 - 2 * progress);
-                MoveTo(CubicBezier(start, control1, control2, end, easedProgress));
+                MoveTo(CubicBezier(start, control1, control2, end, easedProgress), area);
                 if (!Pace()) return false;
             }
+
             return true;
         }
         finally
@@ -404,6 +443,9 @@ public sealed class ActivityEngine
             EndPaced();
         }
     }
+
+    private static bool Contains(PixelRect area, PixelPoint point) =>
+        point.X >= area.X && point.X < area.Right && point.Y >= area.Y && point.Y < area.Bottom;
 
     private MovementPattern ChooseRandomPattern(ActivitySettings settings)
     {

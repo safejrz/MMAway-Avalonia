@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         Deactivated += (_, _) => UpdateWindowBounds();
         PositionChanged += (_, _) => UpdateWindowBounds();
         Resized += (_, _) => UpdateWindowBounds();
+        OutputBox.SizeChanged += (_, _) => UpdateWindowBounds();
         PropertyChanged += (_, e) =>
         {
             if (e.Property == WindowStateProperty) UpdateWindowBounds();
@@ -53,29 +54,30 @@ public partial class MainWindow : Window
 
     // The engine thread must not touch Avalonia properties, so the effective bounds are
     // resolved on the UI thread and published as a single immutable reference.
-    private sealed record BoundsSnapshot(PixelRect Rect, PixelPoint OutputCenter, bool CanClick);
+    private sealed record BoundsSnapshot(PixelRect? Rect, PixelPoint OutputCenter, bool CanClick);
 
     private BoundsSnapshot currentBounds =
-        new(new PixelRect(0, 0, 1024, 768), new PixelPoint(512, 384), false);
-    private PixelRect screenBounds = new(0, 0, 1024, 768);
+        new(null, default, false);
 
-    // Falls back to the screen when the window is minimized or not measured yet.
     private void UpdateWindowBounds()
     {
-        var origin = this.PointToScreen(new Point(0, 0));
+        if (!IsVisible || WindowState == WindowState.Minimized ||
+            OutputBox.Bounds.Width <= 0 || OutputBox.Bounds.Height <= 0)
+        {
+            Volatile.Write(ref currentBounds, new BoundsSnapshot(null, default, false));
+            return;
+        }
+
+        var origin = OutputBox.PointToScreen(new Point(0, 0));
         var scale = RenderScaling;
         var rect = new PixelRect(origin.X, origin.Y,
-            (int)(ClientSize.Width * scale), (int)(ClientSize.Height * scale));
-        var useScreen = WindowState == WindowState.Minimized || rect.Width <= 0 || rect.Height <= 0;
-        var outputCenter = OutputBox.Bounds.Width > 0 && OutputBox.Bounds.Height > 0
-            ? OutputBox.PointToScreen(new Point(OutputBox.Bounds.Width / 2, OutputBox.Bounds.Height / 2))
-            : rect.Center;
+            (int)(OutputBox.Bounds.Width * scale), (int)(OutputBox.Bounds.Height * scale));
+        var outputCenter = OutputBox.PointToScreen(new Point(OutputBox.Bounds.Width / 2, OutputBox.Bounds.Height / 2));
         Volatile.Write(ref currentBounds,
-            new BoundsSnapshot(useScreen ? screenBounds : rect, outputCenter,
-                IsActive && WindowState != WindowState.Minimized));
+            new BoundsSnapshot(rect, outputCenter, IsActive));
     }
 
-    private PixelRect GetBounds() => Volatile.Read(ref currentBounds).Rect;
+    private PixelRect? GetBounds() => Volatile.Read(ref currentBounds).Rect;
     private PixelPoint GetOutputCenter() => Volatile.Read(ref currentBounds).OutputCenter;
     private bool CanClick() => Volatile.Read(ref currentBounds).CanClick;
 
@@ -86,7 +88,6 @@ public partial class MainWindow : Window
     {
         var bounds = (Screens.Primary ?? Screens.All.FirstOrDefault())?.Bounds ?? new PixelRect(0, 0, 1024, 768);
         Position = new PixelPoint(bounds.X + bounds.Width / 10, bounds.Y + bounds.Height / 5);
-        screenBounds = bounds;
         UpdateWindowBounds();
 
         try
