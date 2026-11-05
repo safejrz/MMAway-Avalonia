@@ -9,6 +9,7 @@ Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/M
 - The window icon switches between stopped and running.
 - Configurable global hotkey to start or stop activity.
 - Optional auto-stop after a configured number of minutes (0 disables it).
+- The main window opens near the right side of the primary display's usable area.
 
 ## Platform support
 | OS | Input | Keep-awake | Global hotkey |

@@ -86,8 +86,9 @@ public partial class MainWindow : Window
 
     private async void OnOpened(object? sender, EventArgs e)
     {
-        var bounds = (Screens.Primary ?? Screens.All.FirstOrDefault())?.Bounds ?? new PixelRect(0, 0, 1024, 768);
-        Position = new PixelPoint(bounds.X + bounds.Width / 10, bounds.Y + bounds.Height / 5);
+        var screen = Screens.Primary ?? Screens.All.FirstOrDefault();
+        var workingArea = screen?.WorkingArea ?? new PixelRect(0, 0, 1024, 768);
+        Position = WindowPlacement.GetStartupPosition(workingArea, Bounds.Size, screen?.Scaling ?? RenderScaling);
         UpdateWindowBounds();
 
         try
