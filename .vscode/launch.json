@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MMAway",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build MMAway",
+      "program": "${workspaceFolder}${pathSeparator}src${pathSeparator}MMAway${pathSeparator}bin${pathSeparator}Debug${pathSeparator}net10.0${pathSeparator}MMAway.dll",
+      "cwd": "${workspaceFolder}${pathSeparator}src${pathSeparator}MMAway"
+    }
+  ]
+}

@@ -34,20 +34,24 @@
     <Grid Grid.Row="1" Name="RunningIndicator" ColumnDefinitions="Auto,*,Auto"
           HorizontalAlignment="Stretch" VerticalAlignment="Center"
           Margin="0,6,0,0" ColumnSpacing="8" Opacity="0" IsHitTestVisible="False">
-      <TextBlock Grid.Column="0" Name="SpinnerLeft" Text="◌" FontSize="19"
-                 VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
+      <Ellipse Grid.Column="0" Name="SpinnerLeft" Width="18" Height="18"
+               Stroke="{Binding #RunningLabel.Foreground}" StrokeThickness="1.5"
+               StrokeDashArray="0.5,2" StrokeLineCap="Round"
+               VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
       <Grid Grid.Column="1" MinWidth="250">
         <ProgressBar Name="ActivityProgress" Height="10" IsIndeterminate="True"
                      VerticalAlignment="Center" />
         <TextBlock Name="RunningLabel" Text="Running" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="12" FontWeight="SemiBold" />
       </Grid>
-      <TextBlock Grid.Column="2" Name="SpinnerRight" Text="◌" FontSize="19"
-                 VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
+      <Ellipse Grid.Column="2" Name="SpinnerRight" Width="18" Height="18"
+               Stroke="{Binding #RunningLabel.Foreground}" StrokeThickness="1.5"
+               StrokeDashArray="0.5,2" StrokeLineCap="Round"
+               VerticalAlignment="Center" RenderTransformOrigin="50%,50%" />
     </Grid>
     <Button Grid.Row="2" Name="ToggleButton" Content="Start" Margin="0,6,0,0"
             Height="70" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-            VerticalContentAlignment="Center" FontSize="20" Click="OnToggleClick" />
+            VerticalContentAlignment="Center" FontSize="26" FontWeight="Bold" Click="OnToggleClick" />
     <TextBlock Grid.Row="3" Name="StatusText" IsVisible="False"
                Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11" />
     </Grid>

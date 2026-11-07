@@ -30,6 +30,10 @@ dotnet run --project src/MMAway
 ```
 Run the regression tests with `dotnet test MMAway.slnx`.
 
+To debug in VS Code, install the Microsoft C# extension, open the repository
+folder, and select **MMAway** in Run and Debug before pressing F5. Close any
+running Debug build of MMAway before starting a new build on Windows.
+
 ## Test Windows behavior locally on Linux
 
 The local test VM uses QEMU/KVM, OVMF secure-boot firmware and `swtpm`. On
