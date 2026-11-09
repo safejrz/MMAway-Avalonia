@@ -93,24 +93,40 @@ if [[ ! -S $socket ]]; then
     exit 1
 fi
 
+display_backend=${MMAWAY_VM_DISPLAY:-gtk}
+# The GTK display in distro QEMU builds has no clipboard sync; spice-app does
+# (needs virt-viewer on the host), via the spicevmc channel.
+if [[ $display_backend == spice-app* ]]; then
+    vdagent_chardev=spicevmc,id=vdagent,name=vdagent
+else
+    vdagent_chardev=qemu-vdagent,id=vdagent,name=vdagent,clipboard=on
+fi
+
 args=(
-    -enable-kvm -machine q35,smm=on -cpu host -smp 4 -m 8192
+    -chardev "$vdagent_chardev"
+    -enable-kvm -machine q35,smm=on -cpu host -smp 4 -m 12288
     -drive "if=pflash,format=raw,unit=0,readonly=on,file=$code"
     -drive "if=pflash,format=raw,unit=1,file=$vars"
     -drive "if=ide,format=qcow2,file=$disk"
     -chardev "socket,id=chrtpm,path=$socket"
     -tpmdev emulator,id=tpm0,chardev=chrtpm
     -device tpm-tis,tpmdev=tpm0
+    -vga none -device virtio-vga
     -device qemu-xhci -device usb-tablet
     -netdev user,id=net0,hostfwd=tcp:127.0.0.1:33989-:3389
     -device e1000e,netdev=net0
-    -display "${MMAWAY_VM_DISPLAY:-gtk}"
+    -device virtio-serial-pci
+    -device virtserialport,chardev=vdagent,name=com.redhat.spice.0
+    -display "${display_backend}"
 )
 if [[ -n $iso ]]; then
     args+=(-drive "if=ide,media=cdrom,readonly=on,file=$iso" -boot order=d)
 fi
 if [[ -f $vm_dir/mmaway-share.iso ]]; then
     args+=(-drive "if=ide,media=cdrom,readonly=on,file=$vm_dir/mmaway-share.iso")
+fi
+if [[ -n ${MMAWAY_VIRTIO_ISO:-} ]]; then
+    args+=(-drive "if=ide,media=cdrom,readonly=on,file=$MMAWAY_VIRTIO_ISO")
 fi
 
 echo "Starting VM from $vm_dir. The optional RDP port is available only on 127.0.0.1:33989."
