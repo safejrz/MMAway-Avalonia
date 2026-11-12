@@ -73,6 +73,34 @@ internal interface IGlobalHotkey : IDisposable
 {
 }
 
+internal sealed class HotkeyRegistration(Func<string, Action, IGlobalHotkey> create, Action pressed) : IDisposable
+{
+    private IGlobalHotkey? registration;
+    private HotkeyGesture? activeGesture;
+    public string? ActiveShortcut { get; private set; }
+
+    public void Configure(string shortcut)
+    {
+        var gesture = HotkeyGesture.Parse(shortcut);
+        if (registration is not null && activeGesture == gesture) return;
+
+        var replacement = create(shortcut, pressed);
+        var previous = registration;
+        registration = replacement;
+        activeGesture = gesture;
+        ActiveShortcut = shortcut;
+        previous?.Dispose();
+    }
+
+    public void Dispose()
+    {
+        registration?.Dispose();
+        registration = null;
+        activeGesture = null;
+        ActiveShortcut = null;
+    }
+}
+
 [SupportedOSPlatform("windows")]
 internal sealed class WindowsGlobalHotkey : IGlobalHotkey
 {
@@ -191,6 +219,7 @@ internal sealed class X11GlobalHotkey : IGlobalHotkey
     private const int KeyPress = 2;
     private const uint LockMask = 2;
     private const uint Mod2Mask = 16;
+    private const uint ModifierMask = 0xff;
     private const int GrabModeAsync = 1;
     private const int XEventSize = 192;
 
@@ -301,21 +330,20 @@ internal sealed class X11GlobalHotkey : IGlobalHotkey
             modifiers = ToX11Modifiers(gesture.Modifiers);
 
             var grabs = new List<uint>();
-            for (var lockVariant = 0; lockVariant < 4; lockVariant++)
-            {
-                var locks = (lockVariant & 1) != 0 ? LockMask : 0;
-                locks |= (lockVariant & 2) != 0 ? Mod2Mask : 0;
-                var grabModifiers = modifiers | locks;
-                XGrabKey(display, keycode, grabModifiers, root, 0, GrabModeAsync, GrabModeAsync);
-                grabs.Add(grabModifiers);
-            }
-
             int xError;
             lock (ErrorHandlerGate)
             {
                 errorDisplay = display;
                 lastXError = 0;
                 previousErrorHandler = XSetErrorHandler(Marshal.GetFunctionPointerForDelegate(ErrorHandler));
+                for (var lockVariant = 0; lockVariant < 4; lockVariant++)
+                {
+                    var locks = (lockVariant & 1) != 0 ? LockMask : 0;
+                    locks |= (lockVariant & 2) != 0 ? Mod2Mask : 0;
+                    var grabModifiers = modifiers | locks;
+                    XGrabKey(display, keycode, grabModifiers, root, 0, GrabModeAsync, GrabModeAsync);
+                    grabs.Add(grabModifiers);
+                }
                 XSync(display, false);
                 xError = lastXError;
                 _ = XSetErrorHandler(previousErrorHandler);
@@ -325,7 +353,7 @@ internal sealed class X11GlobalHotkey : IGlobalHotkey
             {
                 foreach (var grab in grabs) XUngrabKey(display, keycode, grab, root);
                 XSync(display, false);
-                throw new InvalidOperationException("The global hotkey could not be grabbed (it may already be in use).");
+                throw new InvalidOperationException("The shortcut may be in use by another MMAway window or application. Close other MMAway windows or choose another shortcut.");
             }
 
             ready.Set();
@@ -335,7 +363,7 @@ internal sealed class X11GlobalHotkey : IGlobalHotkey
                 {
                     XNextEvent(display, out var xEvent);
                     if (xEvent.Type == KeyPress && xEvent.Keycode == keycode &&
-                        (xEvent.State & ~(LockMask | Mod2Mask)) == modifiers)
+                        MatchesModifiers(xEvent.State, modifiers))
                         pressed();
                 }
                 Thread.Sleep(20);
@@ -355,6 +383,9 @@ internal sealed class X11GlobalHotkey : IGlobalHotkey
                 XCloseDisplay(display);
         }
     }
+
+    internal static bool MatchesModifiers(uint state, uint modifiers) =>
+        (state & ModifierMask & ~(LockMask | Mod2Mask)) == modifiers;
 
     private static int CaptureXError(IntPtr display, ref XErrorEvent error)
     {

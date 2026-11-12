@@ -24,12 +24,13 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer spinnerTimer = new() { Interval = TimeSpan.FromMilliseconds(20) };
     private readonly DispatcherTimer sessionStatsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer autoStopTimer = new();
-    private IGlobalHotkey? globalHotkey;
+    private readonly HotkeyRegistration globalHotkey;
     private bool isStopping;
 
     public MainWindow()
     {
         InitializeComponent();
+        globalHotkey = new HotkeyRegistration(PlatformServices.CreateGlobalHotkey, OnGlobalHotkeyPressed);
         SpinnerLeft.RenderTransform = leftSpinnerRotation;
         SpinnerRight.RenderTransform = rightSpinnerRotation;
         spinnerTimer.Tick += (_, _) =>
@@ -211,10 +212,8 @@ public partial class MainWindow : Window
         try
         {
             await settingsStore.SaveAsync(updatedSettings);
-            var oldHotkey = settings.GlobalHotkey;
             Volatile.Write(ref settings, updatedSettings);
-            if (!string.Equals(oldHotkey, updatedSettings.GlobalHotkey, StringComparison.OrdinalIgnoreCase))
-                hotkeyWarning = TryConfigureGlobalHotkey(updatedSettings.GlobalHotkey) ?? string.Empty;
+            hotkeyWarning = TryConfigureGlobalHotkey(updatedSettings.GlobalHotkey) ?? string.Empty;
             if (engine?.IsRunning != true)
                 SetStatusText(GetIdleStatus());
         }
@@ -259,15 +258,15 @@ public partial class MainWindow : Window
     {
         try
         {
-            var replacement = PlatformServices.CreateGlobalHotkey(shortcut, OnGlobalHotkeyPressed);
-            var previous = globalHotkey;
-            globalHotkey = replacement;
-            previous?.Dispose();
+            globalHotkey.Configure(shortcut);
             return null;
         }
         catch (Exception ex)
         {
-            return $"Global hotkey unavailable: {ex.Message}";
+            var previous = globalHotkey.ActiveShortcut is { } active
+                ? $" The previous shortcut ({active}) is still active."
+                : string.Empty;
+            return $"Global hotkey unavailable: {ex.Message}{previous}";
         }
     }
 
@@ -293,7 +292,7 @@ public partial class MainWindow : Window
                 : "Running";
             spinnerTimer.Start();
             sessionStatsTimer.Start();
-            SetStatusText(string.Empty);
+            SetStatusText(GetCurrentWarning());
         }
         else
         {
@@ -320,7 +319,7 @@ public partial class MainWindow : Window
     {
         autoStopTimer.Stop();
         SetRunningVisuals(false);
-        globalHotkey?.Dispose();
+        globalHotkey.Dispose();
         engine?.StopAsync().GetAwaiter().GetResult();
         keepAwake?.Dispose();
         input?.Dispose();

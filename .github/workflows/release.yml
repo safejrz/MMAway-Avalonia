@@ -18,8 +18,12 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish
         run: |
+          version_args=()
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version_args+=("-p:Version=${GITHUB_REF_NAME#v}")
+          fi
           for rid in linux-x64 win-x64; do
-            dotnet publish src/MMAway -c Release -r $rid --self-contained -p:PublishSingleFile=true -o publish/$rid
+            dotnet publish src/MMAway -c Release -r "$rid" --self-contained -p:PublishSingleFile=true "${version_args[@]}" -o "publish/$rid"
             (cd publish/$rid && zip -r ../../MMAway-$rid.zip .)
           done
       - uses: actions/upload-artifact@v4

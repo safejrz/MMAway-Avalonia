@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="MMAway.OptionsWindow"
         Title="MMAway Options"
-        Width="428" Height="600"
+        Width="520" Height="600"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <Grid RowDefinitions="*,Auto,Auto" Margin="26">
@@ -10,9 +10,9 @@
       <TabItem Header="General">
         <StackPanel Spacing="18" Margin="12">
           <StackPanel Spacing="4">
-            <TextBlock Text="Global hotkey" FontSize="16" FontWeight="SemiBold" />
-            <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+M" Width="114" HorizontalAlignment="Left" />
-            <TextBlock Text="Use Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab."
+            <TextBlock Text="Global hotkey (start/stop)" FontSize="16" FontWeight="SemiBold" />
+            <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+Shift+M" Width="160" HorizontalAlignment="Left" />
+            <TextBlock Text="Starts or stops activity while MMAway is open. Use Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
 
@@ -122,6 +122,12 @@
               </StackPanel>
             </Grid>
           </StackPanel>
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="About">
+        <StackPanel Spacing="8" Margin="12">
+          <TextBlock Text="MMAway" FontSize="16" FontWeight="SemiBold" />
+          <TextBlock Name="VersionText" />
         </StackPanel>
       </TabItem>
     </TabControl>

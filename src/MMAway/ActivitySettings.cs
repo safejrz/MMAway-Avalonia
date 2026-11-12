@@ -4,6 +4,7 @@ using MMAway.Input;
 
 public sealed record ActivitySettings
 {
+    public int SettingsVersion { get; init; }
     public int IntervalMinimumSeconds { get; init; } = 4;
     public int IntervalMaximumSeconds { get; init; } = 14;
     public int TypingIntervalMinimumSeconds { get; init; } = 2;
@@ -19,7 +20,7 @@ public sealed record ActivitySettings
     public int UserIdleSeconds { get; init; } = 10;
     public bool ShowSessionInfo { get; init; }
     public int AutoStopMinutes { get; init; }
-    public string GlobalHotkey { get; init; } = "Ctrl+Alt+M";
+    public string GlobalHotkey { get; init; } = "Ctrl+Alt+Shift+M";
 
     public void Validate()
     {

@@ -18,7 +18,9 @@ Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/M
 | Linux, X11 session (Mint Cinnamon, etc.) | XTest (`libX11`, `libXtst`) | `systemd-inhibit` | X11 key grab |
 | Linux, Wayland session | Only reaches XWayland apps (a warning is shown) | `systemd-inhibit` | Not supported |
 
-The default global shortcut is `Ctrl+Alt+M`. It can be changed in Options using Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab. If the shortcut is already taken by another app, MMAway reports that it could not register it. Configure auto-stop in Options; `0` minutes disables it.
+The default global shortcut is `Ctrl+Alt+Shift+M`. Existing settings using the old default `Ctrl+Alt+M` are migrated to the new shortcut; other shortcuts are preserved. It can be changed in Options using Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab. If the shortcut is already taken by another app, MMAway reports that it could not register it and retains any previously active shortcut. Saving Options retries registration. Configure auto-stop in Options; `0` minutes disables it. The About tab shows the application version.
+
+The shortcut starts or stops activity while MMAway is open; it does not launch or exit the application. MMAway registers it automatically. Only one application instance can use a particular shortcut, so close extra MMAway windows if the shortcut appears to control a different window. On Linux, use an X11 session and check the main window for a registration warning if it does not work. If the shortcut is in use, choose another in Options and save. Older published binaries must be rebuilt to include recent changes.
 
 Activity pauses when user mouse activity is detected and resumes after the configured idle delay. Cursor movement pauses while the window is minimized or the text box has no measurable bounds, and resumes when the text box is available again. Teams may therefore become Away while the window is minimized. Before a click, the app moves to the text box center and checks the actual cursor position, user input, window focus and bounds; it skips the click if a check fails. Other input or window changes can still occur between the final check and the OS-level click. On Windows, a native mouse hook ignores injected input and movement to positions injected in the last two seconds, including delayed VM/remote-desktop pointer echoes. A real click still pauses activity, even at an injected position. On X11, cursor-position polling is used. Typing begins after the initial movement pattern completes.
 
@@ -84,7 +86,7 @@ changing idle time alone does not guarantee a particular Teams status.
 dotnet publish src/MMAway -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux-x64
 dotnet publish src/MMAway -c Release -r win-x64   --self-contained -p:PublishSingleFile=true -o publish/win-x64
 ```
-Pushing a `v*` tag builds both and attaches them to a GitHub release (see `.github/workflows/release.yml`).
+Local builds use the development version in `src/MMAway/MMAway.csproj`. Pushing a `v*` tag builds both with the tag's version and attaches them to a GitHub release (see `.github/workflows/release.yml`). After a release, update the project version to the next development version. MMAway Avalonia and the original MMAway project have separate release versions.
 
 ## Layout
 - `src/MMAway/ActivityEngine.cs`: platform-independent activity logic.

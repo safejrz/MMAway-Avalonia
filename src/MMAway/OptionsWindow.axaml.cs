@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using System.Reflection;
 
 namespace MMAway;
 
@@ -19,6 +20,10 @@ public partial class OptionsWindow : Window
     public OptionsWindow(ActivitySettings settings)
     {
         InitializeComponent();
+        var version = typeof(OptionsWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? typeof(OptionsWindow).Assembly.GetName().Version?.ToString()
+            ?? throw new InvalidOperationException("Application version information is unavailable.");
+        VersionText.Text = $"Version {version.Split('+')[0]}";
         BuildPatternChoices();
         SetValues(settings);
         TypingSpacesBox.PropertyChanged += (_, e) =>

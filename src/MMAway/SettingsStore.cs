@@ -19,11 +19,20 @@ public sealed class SettingsStore
     {
         if (!File.Exists(settingsPath)) return new ActivitySettings();
 
-        await using var stream = File.OpenRead(settingsPath);
-        var settings = await JsonSerializer.DeserializeAsync<ActivitySettings>(
-            stream, JsonOptions, cancellationToken)
-            ?? throw new InvalidDataException($"Settings file '{settingsPath}' is empty or invalid.");
+        ActivitySettings settings;
+        await using (var stream = File.OpenRead(settingsPath))
+        {
+            settings = await JsonSerializer.DeserializeAsync<ActivitySettings>(
+                stream, JsonOptions, cancellationToken)
+                ?? throw new InvalidDataException($"Settings file '{settingsPath}' is empty or invalid.");
+        }
         settings.Validate();
+        if (settings.SettingsVersion == 0 &&
+            Input.HotkeyGesture.Parse(settings.GlobalHotkey) == Input.HotkeyGesture.Parse("Ctrl+Alt+M"))
+        {
+            settings = settings with { GlobalHotkey = new ActivitySettings().GlobalHotkey, SettingsVersion = 1 };
+            await SaveAsync(settings, cancellationToken);
+        }
         return settings;
     }
 
@@ -37,7 +46,7 @@ public sealed class SettingsStore
         var temporaryPath = settingsPath + ".tmp";
         await using (var stream = File.Create(temporaryPath))
         {
-            await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
+            await JsonSerializer.SerializeAsync(stream, settings with { SettingsVersion = 1 }, JsonOptions, cancellationToken);
             await stream.FlushAsync(cancellationToken);
         }
 
