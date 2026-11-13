@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly SettingsStore settingsStore = new();
     private ActivitySettings settings = new();
     private string sessionWarning = string.Empty;
+    private string activationWarning = string.Empty;
     private string hotkeyWarning = string.Empty;
     private readonly RotateTransform leftSpinnerRotation = new();
     private readonly RotateTransform rightSpinnerRotation = new();
@@ -26,11 +27,15 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer autoStopTimer = new();
     private readonly HotkeyRegistration globalHotkey;
     private bool isStopping;
+    private bool toggleShortcutPressed;
+    private OptionsWindow? optionsWindow;
 
     public MainWindow()
     {
         InitializeComponent();
         globalHotkey = new HotkeyRegistration(PlatformServices.CreateGlobalHotkey, OnGlobalHotkeyPressed);
+        AddHandler(KeyDownEvent, OnShortcutKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnShortcutKeyUp, RoutingStrategies.Tunnel);
         SpinnerLeft.RenderTransform = leftSpinnerRotation;
         SpinnerRight.RenderTransform = rightSpinnerRotation;
         spinnerTimer.Tick += (_, _) =>
@@ -43,7 +48,11 @@ public partial class MainWindow : Window
         Opened += OnOpened;
         Closing += OnClosing;
         Activated += (_, _) => UpdateWindowBounds();
-        Deactivated += (_, _) => UpdateWindowBounds();
+        Deactivated += (_, _) =>
+        {
+            toggleShortcutPressed = false;
+            UpdateWindowBounds();
+        };
         PositionChanged += (_, _) => UpdateWindowBounds();
         Resized += (_, _) => UpdateWindowBounds();
         OutputBox.SizeChanged += (_, _) => UpdateWindowBounds();
@@ -95,6 +104,7 @@ public partial class MainWindow : Window
         try
         {
             settings = await settingsStore.LoadAsync();
+            hotkeyWarning = TryConfigureGlobalHotkey(settings.GlobalHotkey) ?? string.Empty;
             input = PlatformServices.CreateInput();
             keepAwake = PlatformServices.CreateKeepAwake();
             engine = new ActivityEngine(
@@ -114,7 +124,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        hotkeyWarning = TryConfigureGlobalHotkey(settings.GlobalHotkey) ?? string.Empty;
         sessionWarning = PlatformServices.GetSessionWarning() ?? string.Empty;
         SetStatusText(GetCurrentWarning());
     }
@@ -206,7 +215,16 @@ public partial class MainWindow : Window
     private async void OnOptionsClick(object? sender, RoutedEventArgs e)
     {
         var dialog = new OptionsWindow(Volatile.Read(ref settings));
-        var saved = await dialog.ShowDialog<bool>(this);
+        optionsWindow = dialog;
+        bool saved;
+        try
+        {
+            saved = await dialog.ShowDialog<bool>(this);
+        }
+        finally
+        {
+            optionsWindow = null;
+        }
         if (!saved || dialog.SavedSettings is not { } updatedSettings) return;
 
         try
@@ -241,12 +259,55 @@ public partial class MainWindow : Window
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
+    private async void OnShortcutKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!IsToggleShortcut(e.Key, e.KeyModifiers)) return;
+        e.Handled = true;
+        if (toggleShortcutPressed || !ToggleButton.IsEnabled) return;
+        toggleShortcutPressed = true;
+        try
+        {
+            await ToggleActivityAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatusText($"Shortcut action failed: {ex.Message}");
+        }
+    }
+
+    private void OnShortcutKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.S) toggleShortcutPressed = false;
+    }
+
+    internal static bool IsToggleShortcut(Key key, KeyModifiers modifiers) =>
+        key == Key.S && modifiers == KeyModifiers.Control;
+
+    internal void ActivateFromShortcut()
+    {
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        if (optionsWindow is { } dialog)
+        {
+            if (dialog.WindowState == WindowState.Minimized)
+                dialog.WindowState = WindowState.Normal;
+            dialog.Activate();
+        }
+    }
+
+    internal void ShowActivationError(Exception ex)
+    {
+        activationWarning = $"Could not receive launch shortcut requests: {ex.Message}";
+        SetStatusText(GetCurrentWarning());
+    }
+
     private void OnGlobalHotkeyPressed() =>
-        Dispatcher.UIThread.Post(async () =>
+        Dispatcher.UIThread.Post(() =>
         {
             try
             {
-                await ToggleActivityAsync();
+                ActivateFromShortcut();
             }
             catch (Exception ex)
             {
@@ -258,6 +319,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            ActivitySettings.ValidateGlobalHotkey(shortcut);
             globalHotkey.Configure(shortcut);
             return null;
         }
@@ -266,12 +328,12 @@ public partial class MainWindow : Window
             var previous = globalHotkey.ActiveShortcut is { } active
                 ? $" The previous shortcut ({active}) is still active."
                 : string.Empty;
-            return $"Global hotkey unavailable: {ex.Message}{previous}";
+            return $"In-app global hotkey unavailable: {ex.Message}{previous} An OS shortcut may still work.";
         }
     }
 
     private string GetCurrentWarning() =>
-        string.Join(" ", new[] { sessionWarning, hotkeyWarning }
+        string.Join(" ", new[] { sessionWarning, activationWarning, hotkeyWarning }
             .Where(message => !string.IsNullOrWhiteSpace(message)));
 
     private string GetIdleStatus()

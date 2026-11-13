@@ -51,7 +51,8 @@
     </Grid>
     <Button Grid.Row="2" Name="ToggleButton" Content="Start" Margin="0,6,0,0"
             Height="70" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-            VerticalContentAlignment="Center" FontSize="26" FontWeight="Bold" Click="OnToggleClick" />
+            VerticalContentAlignment="Center" FontSize="26" FontWeight="Bold" Click="OnToggleClick"
+            ToolTip.Tip="Start or stop activity (Ctrl+S)" />
     <TextBlock Grid.Row="3" Name="StatusText" IsVisible="False"
                Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11" />
     </Grid>

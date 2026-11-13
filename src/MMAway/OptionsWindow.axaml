@@ -10,9 +10,9 @@
       <TabItem Header="General">
         <StackPanel Spacing="18" Margin="12">
           <StackPanel Spacing="4">
-            <TextBlock Text="Global hotkey (start/stop)" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Global hotkey (open MMAway)" FontSize="16" FontWeight="SemiBold" />
             <TextBox Name="HotkeyBox" Watermark="Ctrl+Alt+Shift+M" Width="160" HorizontalAlignment="Left" />
-            <TextBlock Text="Starts or stops activity while MMAway is open. Use Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab."
+            <TextBlock Text="Opens an existing window. To launch when closed, configure the same shortcut in your OS. Ctrl+S starts or stops activity when focused."
                        TextWrapping="Wrap" FontSize="11" />
           </StackPanel>
 

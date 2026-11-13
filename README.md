@@ -7,20 +7,58 @@ Cross-platform (Windows and Linux) port of [MMAway](https://github.com/safejrz/M
 - Random typing into its own text box.
 - Keep-awake: `SetThreadExecutionState` on Windows, a `systemd-inhibit` idle/sleep lock on Linux.
 - The window icon switches between stopped and running.
-- Configurable global hotkey to start or stop activity.
+- Configurable global shortcut to restore the running app, with OS setup to launch it when closed.
+- Ctrl+S to start or stop activity while focused.
 - Optional auto-stop after a configured number of minutes (0 disables it).
 - The main window opens near the right side of the primary display's usable area.
 
 ## Platform support
-| OS | Input | Keep-awake | Global hotkey |
-|----|-------|-----------|--------------|
-| Windows 10/11 | `user32` (`SetCursorPos`, `mouse_event`) | `SetThreadExecutionState` | `RegisterHotKey` |
-| Linux, X11 session (Mint Cinnamon, etc.) | XTest (`libX11`, `libXtst`) | `systemd-inhibit` | X11 key grab |
-| Linux, Wayland session | Only reaches XWayland apps (a warning is shown) | `systemd-inhibit` | Not supported |
+| OS | Input | Keep-awake |
+|----|-------|-----------|
+| Windows 10/11 | `user32` (`SetCursorPos`, `mouse_event`) | `SetThreadExecutionState` |
+| Linux, X11 session (Mint Cinnamon, etc.) | XTest (`libX11`, `libXtst`) | `systemd-inhibit` |
+| Linux, Wayland session | Only reaches XWayland apps (a warning is shown) | `systemd-inhibit` |
 
-The default global shortcut is `Ctrl+Alt+Shift+M`. Existing settings using the old default `Ctrl+Alt+M` are migrated to the new shortcut; other shortcuts are preserved. It can be changed in Options using Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12, Space, Enter, Esc, or Tab. If the shortcut is already taken by another app, MMAway reports that it could not register it and retains any previously active shortcut. Saving Options retries registration. Configure auto-stop in Options; `0` minutes disables it. The About tab shows the application version.
+### Keyboard shortcuts
 
-The shortcut starts or stops activity while MMAway is open; it does not launch or exit the application. MMAway registers it automatically. Only one application instance can use a particular shortcut, so close extra MMAway windows if the shortcut appears to control a different window. On Linux, use an X11 session and check the main window for a registration warning if it does not work. If the shortcut is in use, choose another in Options and save. Older published binaries must be rebuilt to include recent changes.
+Press `Ctrl+S` while the main MMAway window is focused to start or stop activity.
+This shortcut does not affect other applications and cannot be used as the
+global shortcut.
+
+Choose the **Global hotkey (open MMAway)** in Options. Its default is
+`Ctrl+Alt+Shift+M`. MMAway attempts to register it on Windows and Linux X11
+while running; pressing it restores the window without starting or stopping
+activity. Options accepts Ctrl, Alt, Shift, or Win with A-Z, 0-9, F1-F12,
+Space, Enter, Esc, or Tab. If registration fails, MMAway reports the error and
+retains any previously active in-app shortcut. Saving Options retries.
+
+To launch MMAway when it is closed, also configure the same shortcut in your
+operating system. Close MMAway before setting it up so its in-app registration
+does not conflict. If you change the shortcut in Options, update the OS
+shortcut separately:
+
+- **Windows:** Create a shortcut to the new `MMAway.exe` on the desktop or in
+  the Start menu. Open the shortcut's Properties, select the Shortcut key
+  field, press your chosen shortcut, and apply. Use a published executable at a
+  stable location rather than a temporary build path.
+- **Linux:** In your desktop's keyboard shortcut settings, add a custom shortcut
+  with your chosen shortcut and the absolute path to the published `MMAway`
+  executable as its command. For Linux Mint Cinnamon, use Keyboard → Shortcuts
+  → Custom Shortcuts. Choose another combination if the desktop reports a
+  conflict. Available shortcuts depend on the OS and desktop environment.
+
+The OS shortcut launches the app if it is closed. If it is already running,
+the new launch requests the existing window to restore and come forward, then
+exits. Focus behavior depends on the window manager. These launch shortcuts
+are managed by the OS, including on Wayland; MMAway's input limitations under
+Wayland still apply. When the OS already owns the shortcut, MMAway may report
+that its in-app registration is unavailable; the configured OS shortcut can
+still launch or restore the app. A registration failure can also mean another
+application owns it, so verify the OS shortcut works or select another one.
+Wayland does not support MMAway's in-app global registration.
+
+Configure auto-stop in Options; `0` minutes disables it. The About tab shows
+the application version.
 
 Activity pauses when user mouse activity is detected and resumes after the configured idle delay. Cursor movement pauses while the window is minimized or the text box has no measurable bounds, and resumes when the text box is available again. Teams may therefore become Away while the window is minimized. Before a click, the app moves to the text box center and checks the actual cursor position, user input, window focus and bounds; it skips the click if a check fails. Other input or window changes can still occur between the final check and the OS-level click. On Windows, a native mouse hook ignores injected input and movement to positions injected in the last two seconds, including delayed VM/remote-desktop pointer echoes. A real click still pauses activity, even at an injected position. On X11, cursor-position polling is used. Typing begins after the initial movement pattern completes.
 

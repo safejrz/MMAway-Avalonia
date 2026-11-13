@@ -181,6 +181,7 @@ public partial class OptionsWindow : Window
         try
         {
             settings.Validate();
+            ActivitySettings.ValidateGlobalHotkey(settings.GlobalHotkey);
             SavedSettings = settings;
             Close(true);
         }

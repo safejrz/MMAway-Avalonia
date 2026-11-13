@@ -15,19 +15,18 @@ public sealed class ActivitySettingsTests
         Assert.Equal("Ctrl+Alt+Shift+M", settings.GlobalHotkey);
     }
 
-    [Theory]
-    [InlineData("Ctrl+Alt+M", "Ctrl+Alt+Shift+M")]
-    [InlineData("Alt+Control+M", "Ctrl+Alt+Shift+M")]
-    [InlineData("Ctrl+Alt+F1", "Ctrl+Alt+F1")]
-    public async Task LegacySettingsMigrateOnlyTheOldDefault(string shortcut, string expected)
+    [Fact]
+    public async Task LegacyGlobalHotkeyIsMigratedWithoutLosingOtherSettings()
     {
         var path = Path.Combine(Path.GetTempPath(), $"mmaway-settings-{Guid.NewGuid():N}.json");
         try
         {
-            await File.WriteAllTextAsync(path, $$"""{"GlobalHotkey":"{{shortcut}}"}""");
+            await File.WriteAllTextAsync(path, """{"GlobalHotkey":"Ctrl+Alt+M","AutoStopMinutes":12}""");
             var store = new SettingsStore(path);
-            Assert.Equal(expected, (await store.LoadAsync()).GlobalHotkey);
-            Assert.Equal(expected, (await store.LoadAsync()).GlobalHotkey);
+            var settings = await store.LoadAsync();
+            Assert.Equal("Ctrl+Alt+Shift+M", settings.GlobalHotkey);
+            Assert.Equal(12, settings.AutoStopMinutes);
+            Assert.Equal("Ctrl+Alt+Shift+M", (await store.LoadAsync()).GlobalHotkey);
         }
         finally
         {
@@ -36,18 +35,32 @@ public sealed class ActivitySettingsTests
     }
 
     [Fact]
-    public async Task SavedOldShortcutIsNotMigratedAgain()
+    public async Task CustomGlobalHotkeySurvivesSavingAndLoading()
     {
         var path = Path.Combine(Path.GetTempPath(), $"mmaway-settings-{Guid.NewGuid():N}.json");
         try
         {
             var store = new SettingsStore(path);
-            await store.SaveAsync(new ActivitySettings { GlobalHotkey = "Ctrl+Alt+M" });
-            Assert.Equal("Ctrl+Alt+M", (await store.LoadAsync()).GlobalHotkey);
+            await store.SaveAsync(new ActivitySettings { GlobalHotkey = "Ctrl+Alt+F2" });
+            Assert.Equal("Ctrl+Alt+F2", (await store.LoadAsync()).GlobalHotkey);
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void InvalidGlobalHotkeyIsRejected()
+    {
+        Assert.ThrowsAny<ArgumentException>(() => new ActivitySettings { GlobalHotkey = "" }.Validate());
+    }
+
+    [Fact]
+    public void ExistingControlSSettingLoadsButCannotBeRegisteredGlobally()
+    {
+        var settings = new ActivitySettings { GlobalHotkey = "control+s" };
+        settings.Validate();
+        Assert.ThrowsAny<ArgumentException>(() => ActivitySettings.ValidateGlobalHotkey(settings.GlobalHotkey));
     }
 }

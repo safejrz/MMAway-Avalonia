@@ -16,11 +16,11 @@ internal static class PlatformServices
         {
             if (string.Equals(Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"), "wayland",
                     StringComparison.OrdinalIgnoreCase))
-                throw new PlatformNotSupportedException("Global hotkeys are not supported in Wayland sessions. Use an X11 session.");
+                throw new PlatformNotSupportedException("In-app global hotkeys are not supported in Wayland sessions. Configure an OS shortcut instead.");
             return new X11GlobalHotkey(gesture, pressed);
         }
 
-        throw new PlatformNotSupportedException("Global hotkeys are supported on Windows and Linux X11.");
+        throw new PlatformNotSupportedException("In-app global hotkeys are supported on Windows and Linux X11.");
     }
 
     public static IInputInjector CreateInput()

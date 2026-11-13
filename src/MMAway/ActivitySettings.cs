@@ -55,4 +55,10 @@ public sealed record ActivitySettings
             throw new ArgumentException("Global hotkey cannot be empty.", nameof(GlobalHotkey));
         _ = HotkeyGesture.Parse(GlobalHotkey);
     }
+
+    internal static void ValidateGlobalHotkey(string shortcut)
+    {
+        if (HotkeyGesture.Parse(shortcut) == HotkeyGesture.Parse("Ctrl+S"))
+            throw new ArgumentException("Ctrl+S is reserved for starting or stopping activity in MMAway.", nameof(GlobalHotkey));
+    }
 }
